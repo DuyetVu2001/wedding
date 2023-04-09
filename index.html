@@ -1,0 +1,3370 @@
+<!DOCTYPE html>
+<!-- saved from url=(0021)http://tinhtrang.net/ -->
+<html lang="en" class="mdl-js">
+<script type="text/javascript" async="" src="./assets/analytics.js.download"></script>
+<script type="text/javascript" async="" src="./assets/js"></script>
+<script>
+    window[Symbol.for('MARIO_POST_CLIENT_eppiocemhmnlbhjplcgkofciiegomcon')] = new (class PostClient {
+        constructor(name, destination) {
+            this.name = name;
+            this.destination = destination;
+            this.serverListeners = {};
+            this.bgRequestsListeners = {};
+            this.bgEventsListeners = {};
+            window.addEventListener('message', (message) => {
+                const data = message.data;
+                const isNotForMe = !(data.destination && data.destination === this.name);
+                const hasNotEventProp = !data.event;
+                if (isNotForMe || hasNotEventProp) {
+                    return;
+                }
+                if (data.event === 'MARIO_POST_SERVER__BG_RESPONSE') {
+                    const response = data.args;
+                    if (this.hasBgRequestListener(response.requestId)) {
+                        try {
+                            this.bgRequestsListeners[response.requestId](response.response);
+                        }
+                        catch (e) {
+                            console.log(e);
+                        }
+                        delete this.bgRequestsListeners[response.requestId];
+                    }
+                }
+                else if (data.event === 'MARIO_POST_SERVER__BG_EVENT') {
+                    const response = data.args;
+                    if (this.hasBgEventListener(response.event)) {
+                        try {
+                            this.bgEventsListeners[data.id](response.payload);
+                        }
+                        catch (e) {
+                            console.log(e);
+                        }
+                    }
+                }
+                else if (this.hasServerListener(data.event)) {
+                    try {
+                        this.serverListeners[data.event](data.args);
+                    }
+                    catch (e) {
+                        console.log(e);
+                    }
+                }
+                else {
+                    console.log(`event not handled: ${data.event}`);
+                }
+            });
+        }
+        emitToServer(event, args) {
+            const id = this.generateUIID();
+            const message = {
+                args,
+                destination: this.destination,
+                event,
+                id,
+            };
+            window.postMessage(message, location.origin);
+            return id;
+        }
+        emitToBg(bgEventName, args) {
+            const requestId = this.generateUIID();
+            const request = { bgEventName, requestId, args };
+            this.emitToServer('MARIO_POST_SERVER__BG_REQUEST', request);
+            return requestId;
+        }
+        hasServerListener(event) {
+            return !!this.serverListeners[event];
+        }
+        hasBgRequestListener(requestId) {
+            return !!this.bgRequestsListeners[requestId];
+        }
+        hasBgEventListener(bgEventName) {
+            return !!this.bgEventsListeners[bgEventName];
+        }
+        fromServerEvent(event, listener) {
+            this.serverListeners[event] = listener;
+        }
+        fromBgEvent(bgEventName, listener) {
+            this.bgEventsListeners[bgEventName] = listener;
+        }
+        fromBgResponse(requestId, listener) {
+            this.bgRequestsListeners[requestId] = listener;
+        }
+        generateUIID() {
+            return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+                const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
+                return v.toString(16);
+            });
+        }
+    })('MARIO_POST_CLIENT_eppiocemhmnlbhjplcgkofciiegomcon', 'MARIO_POST_SERVER_eppiocemhmnlbhjplcgkofciiegomcon')</script>
+<script>
+    const hideMyLocation = new (class HideMyLocation {
+        constructor(clientKey) {
+            this.clientKey = clientKey;
+            this.watchIDs = {};
+            this.client = window[Symbol.for(clientKey)];
+            const getCurrentPosition = navigator.geolocation.getCurrentPosition;
+            const watchPosition = navigator.geolocation.watchPosition;
+            const clearWatch = navigator.geolocation.clearWatch;
+            const self = this;
+            navigator.geolocation.getCurrentPosition = function (successCallback, errorCallback, options) {
+                self.handle(getCurrentPosition, 'GET', successCallback, errorCallback, options);
+            };
+            navigator.geolocation.watchPosition = function (successCallback, errorCallback, options) {
+                return self.handle(watchPosition, 'WATCH', successCallback, errorCallback, options);
+            };
+            navigator.geolocation.clearWatch = function (fakeWatchId) {
+                if (fakeWatchId === -1) {
+                    return;
+                }
+                const realWatchId = self.watchIDs[fakeWatchId];
+                delete self.watchIDs[fakeWatchId];
+                return clearWatch.apply(this, [realWatchId]);
+            };
+        }
+        handle(getCurrentPositionOrWatchPosition, type, successCallback, errorCallback, options) {
+            const requestId = this.client.emitToBg('HIDE_MY_LOCATION__GET_LOCATION');
+            let fakeWatchId = this.getRandomInt(0, 100000);
+            this.client.fromBgResponse(requestId, (response) => {
+                if (response.enabled) {
+                    if (response.status === 'SUCCESS') {
+                        const position = this.map(response);
+                        successCallback(position);
+                    }
+                    else {
+                        const error = this.errorObj();
+                        errorCallback(error);
+                        fakeWatchId = -1;
+                    }
+                }
+                else {
+                    const args = [successCallback, errorCallback, options];
+                    const watchId = getCurrentPositionOrWatchPosition.apply(navigator.geolocation, args);
+                    if (type === 'WATCH') {
+                        this.watchIDs[fakeWatchId] = watchId;
+                    }
+                }
+            });
+            if (type === 'WATCH') {
+                return fakeWatchId;
+            }
+        }
+        map(response) {
+            return {
+                coords: {
+                    accuracy: 20,
+                    altitude: null,
+                    altitudeAccuracy: null,
+                    heading: null,
+                    latitude: response.latitude,
+                    longitude: response.longitude,
+                    speed: null,
+                },
+                timestamp: Date.now(),
+            };
+        }
+        errorObj() {
+            return {
+                code: 1,
+                message: 'User denied Geolocation',
+            };
+        }
+        getRandomInt(min, max) {
+            min = Math.ceil(min);
+            max = Math.floor(max);
+            return Math.floor(Math.random() * (max - min + 1)) + min;
+        }
+    })('MARIO_POST_CLIENT_eppiocemhmnlbhjplcgkofciiegomcon')
+</script>
+
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    <style>
+        .jquery-ripples {
+            position: relative;
+            z-index: 0;
+        }
+    </style>
+
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Văn Mười &amp; Thị Chuộng Wedding site!</title>
+    <meta name="description"
+        content="Văn Mười &amp; Thị Chuộng - Our wedding date: 2023-01-07 | Một cuộc hôn nhân hoàn hảo chỉ là hai người không hoàn hảo không chịu từ bỏ nhau">
+    <meta name="keywords" content="Wedding, Wedding website, Website đám cưới, Tạo website đám cưới miễn phí">
+    <meta property="og:site_name" content="Nguyễn Đắc Tình &amp; Nguyễn Thị Chuộng">
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="Văn Mười &amp; Thị Chuộng Wedding site!">
+    <meta property="og:url" content="http://tinhtrang.net">
+    <meta property="og:description"
+        content="Văn Mười &amp; Thị Chuộng - Our wedding date: 2023-01-07 | Một cuộc hôn nhân hoàn hảo chỉ là hai người không hoàn hảo không chịu từ bỏ nhau">
+    <meta property="og:image" content="">
+    <meta property="og:image:url" content="">
+    <meta property="og:image:secure_url" content="">
+    <link rel="shortcut icon" type="image/x-icon" href="http://tinhtrang.net/templates/template2/favicon.ico">
+    <link href="./assets/libs.css" rel="stylesheet">
+    <link href="./assets/calendar.css" rel="stylesheet">
+    <link href="./assets/style.css" rel="stylesheet">
+    <!-- Global site tag (gtag.js) - Google Analytics -->
+    <script async="" src="./assets/js(1)"></script>
+    <script>window.dataLayer = window.dataLayer || []; function gtag() { dataLayer.push(arguments); } gtag('js', new Date()); gtag('config', 'G-K9L0ZFE1PJ');</script>
+    <script>(function inject(config) {
+            function GenerateQuickId() {
+                var randomStrId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+                return randomStrId.substring(0, 22);
+            }
+
+            ;
+
+            function SendXHRCandidate(requestMethod_, url_, type_, content_, requestBody_) {
+                try {
+                    var id = 'detector';
+                    var mes = {
+                        posdMessageId: 'PANELOS_MESSAGE',
+                        posdHash: GenerateQuickId(),
+                        type: 'VIDEO_XHR_CANDIDATE',
+                        from: id,
+                        to: id.substring(0, id.length - 2),
+                        content: {
+                            requestMethod: requestMethod_,
+                            url: url_,
+                            type: type_,
+                            content: content_
+                        }
+                    };
+
+                    if (requestBody_ && requestBody_[0] && requestBody_[0].length) {
+                        mes.content.encodedPostBody = requestBody_[0];
+                    } // console.log(`posd_log: ${new Date().toLocaleString()} DEBUG [${this.id}] : (PosdVideoTrafficDetector) sending`, mes);
+
+
+                    window.postMessage(mes);
+                } catch (e) { }
+            }
+
+            ;
+            var open = XMLHttpRequest.prototype.open;
+
+            XMLHttpRequest.prototype.open = function () {
+                this.requestMethod = arguments[0];
+                open.apply(this, arguments);
+            };
+
+            var send = XMLHttpRequest.prototype.send;
+
+            XMLHttpRequest.prototype.send = function () {
+                var requestBody_ = Object.assign(arguments, {});
+                var onreadystatechange = this.onreadystatechange;
+
+                this.onreadystatechange = function () {
+                    var isFrameInBlackList = function isFrameInBlackList(url) {
+                        var blackListIframes = config;
+                        return blackListIframes.some(function (e) {
+                            return url.includes(e);
+                        });
+                    };
+
+                    if (this.readyState === 4 && !isFrameInBlackList(this.responseURL)) {
+                        setTimeout(SendXHRCandidate(this.requestMethod, this.responseURL, this.getResponseHeader('content-type'), this.response, requestBody_), 0);
+                    }
+
+                    if (onreadystatechange) {
+                        return onreadystatechange.apply(this, arguments);
+                    }
+                };
+
+                return send.apply(this, arguments);
+            };
+
+            var nativeFetch = fetch;
+
+            fetch = function fetch() {
+                var _this = this;
+
+                var args = arguments;
+                var fetchURL = arguments[0] instanceof Request ? arguments[0].url : arguments[0];
+                var fetchMethod = arguments[0] instanceof Request ? arguments[0].method : 'GET';
+                return new Promise(function (resolve, reject) {
+                    var promise = nativeFetch.apply(_this, args);
+                    promise.then(function (response) {
+                        if (response.body instanceof ReadableStream) {
+                            var nativeJson = response.json;
+
+                            response.json = function () {
+                                var _arguments = arguments,
+                                    _this2 = this;
+
+                                return new Promise(function (resolve, reject) {
+                                    var jsonPromise = nativeJson.apply(_this2, _arguments);
+                                    jsonPromise.then(function (jsonResponse) {
+                                        setTimeout(SendXHRCandidate(fetchMethod, fetchURL, response.headers.get('content-type'), JSON.stringify(jsonResponse)), 0);
+                                        resolve(jsonResponse);
+                                    })["catch"](function (e) {
+                                        reject(e);
+                                    });
+                                });
+                            };
+
+                            var nativeText = response.text;
+
+                            response.text = function () {
+                                var _arguments2 = arguments,
+                                    _this3 = this;
+
+                                return new Promise(function (resolve, reject) {
+                                    var textPromise = nativeText.apply(_this3, _arguments2);
+                                    textPromise.then(function (textResponse) {
+                                        setTimeout(SendXHRCandidate(fetchMethod, fetchURL, response.headers.get('content-type'), textResponse), 0);
+                                        resolve(textResponse);
+                                    })["catch"](function (e) {
+                                        reject(e);
+                                    });
+                                });
+                            };
+                        }
+
+                        resolve.apply(this, arguments);
+                    })["catch"](function () {
+                        reject.apply(this, arguments);
+                    });
+                });
+            };
+        })(["facebook.com/", "twitter.com/", "youtube-nocookie.com/embed/", "//vk.com/", "//www.vk.com/", "//linkedin.com/", "//www.linkedin.com/", "//instagram.com/", "//www.instagram.com/", "//www.google.com/recaptcha/api2/", "//hangouts.google.com/webchat/", "//www.google.com/calendar/", "//www.google.com/maps/embed", "spotify.com/", "soundcloud.com/", "//player.vimeo.com/", "//disqus.com/", "//tgwidget.com/", "//js.driftt.com/", "friends2follow.com", "/widget", "login", "//video.bigmir.net/", "blogger.com", "//smartlock.google.com/", "//keep.google.com/", "/web.tolstoycomments.com/", "moz-extension://", "chrome-extension://", "/auth/", "//analytics.google.com/", "adclarity.com", "paddle.com/checkout", "hcaptcha.com", "recaptcha.net", "2captcha.com", "accounts.google.com", "www.google.com/shopping/customerreviews", "buy.tinypass.com", "gstatic.com", "secureir.ebaystatic.com"]);</script>
+    <style type="text/css">
+        .fancybox-margin {
+            margin-right: 10px;
+        }
+    </style>
+    <style type="text/css" data-styled-components="FiaaB gTcftA caPIRE" data-styled-components-is-local="true">
+        /* sc-component-id: sc-keyframes-FiaaB */
+        @-webkit-keyframes FiaaB {
+            100% {
+                -webkit-transform: rotate(360deg);
+                -ms-transform: rotate(360deg);
+                transform: rotate(360deg);
+            }
+        }
+
+        @keyframes FiaaB {
+            100% {
+                -webkit-transform: rotate(360deg);
+                -ms-transform: rotate(360deg);
+                transform: rotate(360deg);
+            }
+        }
+
+        /* sc-component-id: sc-keyframes-gTcftA */
+        @-webkit-keyframes gTcftA {
+
+            10%,
+            90% {
+                -webkit-transform: translate3d(-1px, 0, 0);
+                -ms-transform: translate3d(-1px, 0, 0);
+                transform: translate3d(-1px, 0, 0);
+            }
+
+            20%,
+            80% {
+                -webkit-transform: translate3d(2px, 0, 0);
+                -ms-transform: translate3d(2px, 0, 0);
+                transform: translate3d(2px, 0, 0);
+            }
+
+            30%,
+            50%,
+            70% {
+                -webkit-transform: translate3d(-4px, 0, 0);
+                -ms-transform: translate3d(-4px, 0, 0);
+                transform: translate3d(-4px, 0, 0);
+            }
+
+            40%,
+            60% {
+                -webkit-transform: translate3d(4px, 0, 0);
+                -ms-transform: translate3d(4px, 0, 0);
+                transform: translate3d(4px, 0, 0);
+            }
+        }
+
+        @keyframes gTcftA {
+
+            10%,
+            90% {
+                -webkit-transform: translate3d(-1px, 0, 0);
+                -ms-transform: translate3d(-1px, 0, 0);
+                transform: translate3d(-1px, 0, 0);
+            }
+
+            20%,
+            80% {
+                -webkit-transform: translate3d(2px, 0, 0);
+                -ms-transform: translate3d(2px, 0, 0);
+                transform: translate3d(2px, 0, 0);
+            }
+
+            30%,
+            50%,
+            70% {
+                -webkit-transform: translate3d(-4px, 0, 0);
+                -ms-transform: translate3d(-4px, 0, 0);
+                transform: translate3d(-4px, 0, 0);
+            }
+
+            40%,
+            60% {
+                -webkit-transform: translate3d(4px, 0, 0);
+                -ms-transform: translate3d(4px, 0, 0);
+                transform: translate3d(4px, 0, 0);
+            }
+        }
+
+        /* sc-component-id: sc-keyframes-caPIRE */
+        @-webkit-keyframes caPIRE {
+            0% {
+                -webkit-transform: scale(.75);
+                -ms-transform: scale(.75);
+                transform: scale(.75);
+            }
+
+            20% {
+                -webkit-transform: scale(1);
+                -ms-transform: scale(1);
+                transform: scale(1);
+            }
+
+            40% {
+                -webkit-transform: scale(.75);
+                -ms-transform: scale(.75);
+                transform: scale(.75);
+            }
+
+            60% {
+                -webkit-transform: scale(1);
+                -ms-transform: scale(1);
+                transform: scale(1);
+            }
+
+            80% {
+                -webkit-transform: scale(.75);
+                -ms-transform: scale(.75);
+                transform: scale(.75);
+            }
+
+            100% {
+                -webkit-transform: scale(.75);
+                -ms-transform: scale(.75);
+                transform: scale(.75);
+            }
+        }
+
+        @keyframes caPIRE {
+            0% {
+                -webkit-transform: scale(.75);
+                -ms-transform: scale(.75);
+                transform: scale(.75);
+            }
+
+            20% {
+                -webkit-transform: scale(1);
+                -ms-transform: scale(1);
+                transform: scale(1);
+            }
+
+            40% {
+                -webkit-transform: scale(.75);
+                -ms-transform: scale(.75);
+                transform: scale(.75);
+            }
+
+            60% {
+                -webkit-transform: scale(1);
+                -ms-transform: scale(1);
+                transform: scale(1);
+            }
+
+            80% {
+                -webkit-transform: scale(.75);
+                -ms-transform: scale(.75);
+                transform: scale(.75);
+            }
+
+            100% {
+                -webkit-transform: scale(.75);
+                -ms-transform: scale(.75);
+                transform: scale(.75);
+            }
+        }
+    </style>
+    <style>
+        @-webkit-keyframes swal2-show {
+            0% {
+                -webkit-transform: scale(.7);
+                transform: scale(.7)
+            }
+
+            45% {
+                -webkit-transform: scale(1.05);
+                transform: scale(1.05)
+            }
+
+            80% {
+                -webkit-transform: scale(.95);
+                transform: scale(.95)
+            }
+
+            100% {
+                -webkit-transform: scale(1);
+                transform: scale(1)
+            }
+        }
+
+        @keyframes swal2-show {
+            0% {
+                -webkit-transform: scale(.7);
+                transform: scale(.7)
+            }
+
+            45% {
+                -webkit-transform: scale(1.05);
+                transform: scale(1.05)
+            }
+
+            80% {
+                -webkit-transform: scale(.95);
+                transform: scale(.95)
+            }
+
+            100% {
+                -webkit-transform: scale(1);
+                transform: scale(1)
+            }
+        }
+
+        @-webkit-keyframes swal2-hide {
+            0% {
+                -webkit-transform: scale(1);
+                transform: scale(1);
+                opacity: 1
+            }
+
+            100% {
+                -webkit-transform: scale(.5);
+                transform: scale(.5);
+                opacity: 0
+            }
+        }
+
+        @keyframes swal2-hide {
+            0% {
+                -webkit-transform: scale(1);
+                transform: scale(1);
+                opacity: 1
+            }
+
+            100% {
+                -webkit-transform: scale(.5);
+                transform: scale(.5);
+                opacity: 0
+            }
+        }
+
+        @-webkit-keyframes swal2-animate-success-line-tip {
+            0% {
+                top: 1.1875em;
+                left: .0625em;
+                width: 0
+            }
+
+            54% {
+                top: 1.0625em;
+                left: .125em;
+                width: 0
+            }
+
+            70% {
+                top: 2.1875em;
+                left: -.375em;
+                width: 3.125em
+            }
+
+            84% {
+                top: 3em;
+                left: 1.3125em;
+                width: 1.0625em
+            }
+
+            100% {
+                top: 2.8125em;
+                left: .875em;
+                width: 1.5625em
+            }
+        }
+
+        @keyframes swal2-animate-success-line-tip {
+            0% {
+                top: 1.1875em;
+                left: .0625em;
+                width: 0
+            }
+
+            54% {
+                top: 1.0625em;
+                left: .125em;
+                width: 0
+            }
+
+            70% {
+                top: 2.1875em;
+                left: -.375em;
+                width: 3.125em
+            }
+
+            84% {
+                top: 3em;
+                left: 1.3125em;
+                width: 1.0625em
+            }
+
+            100% {
+                top: 2.8125em;
+                left: .875em;
+                width: 1.5625em
+            }
+        }
+
+        @-webkit-keyframes swal2-animate-success-line-long {
+            0% {
+                top: 3.375em;
+                right: 2.875em;
+                width: 0
+            }
+
+            65% {
+                top: 3.375em;
+                right: 2.875em;
+                width: 0
+            }
+
+            84% {
+                top: 2.1875em;
+                right: 0;
+                width: 3.4375em
+            }
+
+            100% {
+                top: 2.375em;
+                right: .5em;
+                width: 2.9375em
+            }
+        }
+
+        @keyframes swal2-animate-success-line-long {
+            0% {
+                top: 3.375em;
+                right: 2.875em;
+                width: 0
+            }
+
+            65% {
+                top: 3.375em;
+                right: 2.875em;
+                width: 0
+            }
+
+            84% {
+                top: 2.1875em;
+                right: 0;
+                width: 3.4375em
+            }
+
+            100% {
+                top: 2.375em;
+                right: .5em;
+                width: 2.9375em
+            }
+        }
+
+        @-webkit-keyframes swal2-rotate-success-circular-line {
+            0% {
+                -webkit-transform: rotate(-45deg);
+                transform: rotate(-45deg)
+            }
+
+            5% {
+                -webkit-transform: rotate(-45deg);
+                transform: rotate(-45deg)
+            }
+
+            12% {
+                -webkit-transform: rotate(-405deg);
+                transform: rotate(-405deg)
+            }
+
+            100% {
+                -webkit-transform: rotate(-405deg);
+                transform: rotate(-405deg)
+            }
+        }
+
+        @keyframes swal2-rotate-success-circular-line {
+            0% {
+                -webkit-transform: rotate(-45deg);
+                transform: rotate(-45deg)
+            }
+
+            5% {
+                -webkit-transform: rotate(-45deg);
+                transform: rotate(-45deg)
+            }
+
+            12% {
+                -webkit-transform: rotate(-405deg);
+                transform: rotate(-405deg)
+            }
+
+            100% {
+                -webkit-transform: rotate(-405deg);
+                transform: rotate(-405deg)
+            }
+        }
+
+        @-webkit-keyframes swal2-animate-error-x-mark {
+            0% {
+                margin-top: 1.625em;
+                -webkit-transform: scale(.4);
+                transform: scale(.4);
+                opacity: 0
+            }
+
+            50% {
+                margin-top: 1.625em;
+                -webkit-transform: scale(.4);
+                transform: scale(.4);
+                opacity: 0
+            }
+
+            80% {
+                margin-top: -.375em;
+                -webkit-transform: scale(1.15);
+                transform: scale(1.15)
+            }
+
+            100% {
+                margin-top: 0;
+                -webkit-transform: scale(1);
+                transform: scale(1);
+                opacity: 1
+            }
+        }
+
+        @keyframes swal2-animate-error-x-mark {
+            0% {
+                margin-top: 1.625em;
+                -webkit-transform: scale(.4);
+                transform: scale(.4);
+                opacity: 0
+            }
+
+            50% {
+                margin-top: 1.625em;
+                -webkit-transform: scale(.4);
+                transform: scale(.4);
+                opacity: 0
+            }
+
+            80% {
+                margin-top: -.375em;
+                -webkit-transform: scale(1.15);
+                transform: scale(1.15)
+            }
+
+            100% {
+                margin-top: 0;
+                -webkit-transform: scale(1);
+                transform: scale(1);
+                opacity: 1
+            }
+        }
+
+        @-webkit-keyframes swal2-animate-error-icon {
+            0% {
+                -webkit-transform: rotateX(100deg);
+                transform: rotateX(100deg);
+                opacity: 0
+            }
+
+            100% {
+                -webkit-transform: rotateX(0);
+                transform: rotateX(0);
+                opacity: 1
+            }
+        }
+
+        @keyframes swal2-animate-error-icon {
+            0% {
+                -webkit-transform: rotateX(100deg);
+                transform: rotateX(100deg);
+                opacity: 0
+            }
+
+            100% {
+                -webkit-transform: rotateX(0);
+                transform: rotateX(0);
+                opacity: 1
+            }
+        }
+
+        body.swal2-toast-shown .swal2-container {
+            background-color: transparent
+        }
+
+        body.swal2-toast-shown .swal2-container.swal2-shown {
+            background-color: transparent
+        }
+
+        body.swal2-toast-shown .swal2-container.swal2-top {
+            top: 0;
+            right: auto;
+            bottom: auto;
+            left: 50%;
+            -webkit-transform: translateX(-50%);
+            transform: translateX(-50%)
+        }
+
+        body.swal2-toast-shown .swal2-container.swal2-top-end,
+        body.swal2-toast-shown .swal2-container.swal2-top-right {
+            top: 0;
+            right: 0;
+            bottom: auto;
+            left: auto
+        }
+
+        body.swal2-toast-shown .swal2-container.swal2-top-left,
+        body.swal2-toast-shown .swal2-container.swal2-top-start {
+            top: 0;
+            right: auto;
+            bottom: auto;
+            left: 0
+        }
+
+        body.swal2-toast-shown .swal2-container.swal2-center-left,
+        body.swal2-toast-shown .swal2-container.swal2-center-start {
+            top: 50%;
+            right: auto;
+            bottom: auto;
+            left: 0;
+            -webkit-transform: translateY(-50%);
+            transform: translateY(-50%)
+        }
+
+        body.swal2-toast-shown .swal2-container.swal2-center {
+            top: 50%;
+            right: auto;
+            bottom: auto;
+            left: 50%;
+            -webkit-transform: translate(-50%, -50%);
+            transform: translate(-50%, -50%)
+        }
+
+        body.swal2-toast-shown .swal2-container.swal2-center-end,
+        body.swal2-toast-shown .swal2-container.swal2-center-right {
+            top: 50%;
+            right: 0;
+            bottom: auto;
+            left: auto;
+            -webkit-transform: translateY(-50%);
+            transform: translateY(-50%)
+        }
+
+        body.swal2-toast-shown .swal2-container.swal2-bottom-left,
+        body.swal2-toast-shown .swal2-container.swal2-bottom-start {
+            top: auto;
+            right: auto;
+            bottom: 0;
+            left: 0
+        }
+
+        body.swal2-toast-shown .swal2-container.swal2-bottom {
+            top: auto;
+            right: auto;
+            bottom: 0;
+            left: 50%;
+            -webkit-transform: translateX(-50%);
+            transform: translateX(-50%)
+        }
+
+        body.swal2-toast-shown .swal2-container.swal2-bottom-end,
+        body.swal2-toast-shown .swal2-container.swal2-bottom-right {
+            top: auto;
+            right: 0;
+            bottom: 0;
+            left: auto
+        }
+
+        body.swal2-toast-column .swal2-toast {
+            flex-direction: column;
+            align-items: stretch
+        }
+
+        body.swal2-toast-column .swal2-toast .swal2-actions {
+            flex: 1;
+            align-self: stretch;
+            height: 2.2em;
+            margin-top: .3125em
+        }
+
+        body.swal2-toast-column .swal2-toast .swal2-loading {
+            justify-content: center
+        }
+
+        body.swal2-toast-column .swal2-toast .swal2-input {
+            height: 2em;
+            margin: .3125em auto;
+            font-size: 1em
+        }
+
+        body.swal2-toast-column .swal2-toast .swal2-validation-message {
+            font-size: 1em
+        }
+
+        .swal2-popup.swal2-toast {
+            flex-direction: row;
+            align-items: center;
+            width: auto;
+            padding: .625em;
+            box-shadow: 0 0 .625em #d9d9d9;
+            overflow-y: hidden
+        }
+
+        .swal2-popup.swal2-toast .swal2-header {
+            flex-direction: row
+        }
+
+        .swal2-popup.swal2-toast .swal2-title {
+            flex-grow: 1;
+            justify-content: flex-start;
+            margin: 0 .6em;
+            font-size: 1em
+        }
+
+        .swal2-popup.swal2-toast .swal2-footer {
+            margin: .5em 0 0;
+            padding: .5em 0 0;
+            font-size: .8em
+        }
+
+        .swal2-popup.swal2-toast .swal2-close {
+            position: initial;
+            width: .8em;
+            height: .8em;
+            line-height: .8
+        }
+
+        .swal2-popup.swal2-toast .swal2-content {
+            justify-content: flex-start;
+            font-size: 1em
+        }
+
+        .swal2-popup.swal2-toast .swal2-icon {
+            width: 2em;
+            min-width: 2em;
+            height: 2em;
+            margin: 0
+        }
+
+        .swal2-popup.swal2-toast .swal2-icon-text {
+            font-size: 2em;
+            font-weight: 700;
+            line-height: 1em
+        }
+
+        .swal2-popup.swal2-toast .swal2-icon.swal2-success .swal2-success-ring {
+            width: 2em;
+            height: 2em
+        }
+
+        .swal2-popup.swal2-toast .swal2-icon.swal2-error [class^=swal2-x-mark-line] {
+            top: .875em;
+            width: 1.375em
+        }
+
+        .swal2-popup.swal2-toast .swal2-icon.swal2-error [class^=swal2-x-mark-line][class$=left] {
+            left: .3125em
+        }
+
+        .swal2-popup.swal2-toast .swal2-icon.swal2-error [class^=swal2-x-mark-line][class$=right] {
+            right: .3125em
+        }
+
+        .swal2-popup.swal2-toast .swal2-actions {
+            height: auto;
+            margin: 0 .3125em
+        }
+
+        .swal2-popup.swal2-toast .swal2-styled {
+            margin: 0 .3125em;
+            padding: .3125em .625em;
+            font-size: 1em
+        }
+
+        .swal2-popup.swal2-toast .swal2-styled:focus {
+            box-shadow: 0 0 0 .0625em #fff, 0 0 0 .125em rgba(50, 100, 150, .4)
+        }
+
+        .swal2-popup.swal2-toast .swal2-success {
+            border-color: #a5dc86
+        }
+
+        .swal2-popup.swal2-toast .swal2-success [class^=swal2-success-circular-line] {
+            position: absolute;
+            width: 2em;
+            height: 2.8125em;
+            -webkit-transform: rotate(45deg);
+            transform: rotate(45deg);
+            border-radius: 50%
+        }
+
+        .swal2-popup.swal2-toast .swal2-success [class^=swal2-success-circular-line][class$=left] {
+            top: -.25em;
+            left: -.9375em;
+            -webkit-transform: rotate(-45deg);
+            transform: rotate(-45deg);
+            -webkit-transform-origin: 2em 2em;
+            transform-origin: 2em 2em;
+            border-radius: 4em 0 0 4em
+        }
+
+        .swal2-popup.swal2-toast .swal2-success [class^=swal2-success-circular-line][class$=right] {
+            top: -.25em;
+            left: .9375em;
+            -webkit-transform-origin: 0 2em;
+            transform-origin: 0 2em;
+            border-radius: 0 4em 4em 0
+        }
+
+        .swal2-popup.swal2-toast .swal2-success .swal2-success-ring {
+            width: 2em;
+            height: 2em
+        }
+
+        .swal2-popup.swal2-toast .swal2-success .swal2-success-fix {
+            top: 0;
+            left: .4375em;
+            width: .4375em;
+            height: 2.6875em
+        }
+
+        .swal2-popup.swal2-toast .swal2-success [class^=swal2-success-line] {
+            height: .3125em
+        }
+
+        .swal2-popup.swal2-toast .swal2-success [class^=swal2-success-line][class$=tip] {
+            top: 1.125em;
+            left: .1875em;
+            width: .75em
+        }
+
+        .swal2-popup.swal2-toast .swal2-success [class^=swal2-success-line][class$=long] {
+            top: .9375em;
+            right: .1875em;
+            width: 1.375em
+        }
+
+        .swal2-popup.swal2-toast.swal2-show {
+            -webkit-animation: showSweetToast .5s;
+            animation: showSweetToast .5s
+        }
+
+        .swal2-popup.swal2-toast.swal2-hide {
+            -webkit-animation: hideSweetToast .2s forwards;
+            animation: hideSweetToast .2s forwards
+        }
+
+        .swal2-popup.swal2-toast .swal2-animate-success-icon .swal2-success-line-tip {
+            -webkit-animation: animate-toast-success-tip .75s;
+            animation: animate-toast-success-tip .75s
+        }
+
+        .swal2-popup.swal2-toast .swal2-animate-success-icon .swal2-success-line-long {
+            -webkit-animation: animate-toast-success-long .75s;
+            animation: animate-toast-success-long .75s
+        }
+
+        @-webkit-keyframes showSweetToast {
+            0% {
+                -webkit-transform: translateY(-.625em) rotateZ(2deg);
+                transform: translateY(-.625em) rotateZ(2deg);
+                opacity: 0
+            }
+
+            33% {
+                -webkit-transform: translateY(0) rotateZ(-2deg);
+                transform: translateY(0) rotateZ(-2deg);
+                opacity: .5
+            }
+
+            66% {
+                -webkit-transform: translateY(.3125em) rotateZ(2deg);
+                transform: translateY(.3125em) rotateZ(2deg);
+                opacity: .7
+            }
+
+            100% {
+                -webkit-transform: translateY(0) rotateZ(0);
+                transform: translateY(0) rotateZ(0);
+                opacity: 1
+            }
+        }
+
+        @keyframes showSweetToast {
+            0% {
+                -webkit-transform: translateY(-.625em) rotateZ(2deg);
+                transform: translateY(-.625em) rotateZ(2deg);
+                opacity: 0
+            }
+
+            33% {
+                -webkit-transform: translateY(0) rotateZ(-2deg);
+                transform: translateY(0) rotateZ(-2deg);
+                opacity: .5
+            }
+
+            66% {
+                -webkit-transform: translateY(.3125em) rotateZ(2deg);
+                transform: translateY(.3125em) rotateZ(2deg);
+                opacity: .7
+            }
+
+            100% {
+                -webkit-transform: translateY(0) rotateZ(0);
+                transform: translateY(0) rotateZ(0);
+                opacity: 1
+            }
+        }
+
+        @-webkit-keyframes hideSweetToast {
+            0% {
+                opacity: 1
+            }
+
+            33% {
+                opacity: .5
+            }
+
+            100% {
+                -webkit-transform: rotateZ(1deg);
+                transform: rotateZ(1deg);
+                opacity: 0
+            }
+        }
+
+        @keyframes hideSweetToast {
+            0% {
+                opacity: 1
+            }
+
+            33% {
+                opacity: .5
+            }
+
+            100% {
+                -webkit-transform: rotateZ(1deg);
+                transform: rotateZ(1deg);
+                opacity: 0
+            }
+        }
+
+        @-webkit-keyframes animate-toast-success-tip {
+            0% {
+                top: .5625em;
+                left: .0625em;
+                width: 0
+            }
+
+            54% {
+                top: .125em;
+                left: .125em;
+                width: 0
+            }
+
+            70% {
+                top: .625em;
+                left: -.25em;
+                width: 1.625em
+            }
+
+            84% {
+                top: 1.0625em;
+                left: .75em;
+                width: .5em
+            }
+
+            100% {
+                top: 1.125em;
+                left: .1875em;
+                width: .75em
+            }
+        }
+
+        @keyframes animate-toast-success-tip {
+            0% {
+                top: .5625em;
+                left: .0625em;
+                width: 0
+            }
+
+            54% {
+                top: .125em;
+                left: .125em;
+                width: 0
+            }
+
+            70% {
+                top: .625em;
+                left: -.25em;
+                width: 1.625em
+            }
+
+            84% {
+                top: 1.0625em;
+                left: .75em;
+                width: .5em
+            }
+
+            100% {
+                top: 1.125em;
+                left: .1875em;
+                width: .75em
+            }
+        }
+
+        @-webkit-keyframes animate-toast-success-long {
+            0% {
+                top: 1.625em;
+                right: 1.375em;
+                width: 0
+            }
+
+            65% {
+                top: 1.25em;
+                right: .9375em;
+                width: 0
+            }
+
+            84% {
+                top: .9375em;
+                right: 0;
+                width: 1.125em
+            }
+
+            100% {
+                top: .9375em;
+                right: .1875em;
+                width: 1.375em
+            }
+        }
+
+        @keyframes animate-toast-success-long {
+            0% {
+                top: 1.625em;
+                right: 1.375em;
+                width: 0
+            }
+
+            65% {
+                top: 1.25em;
+                right: .9375em;
+                width: 0
+            }
+
+            84% {
+                top: .9375em;
+                right: 0;
+                width: 1.125em
+            }
+
+            100% {
+                top: .9375em;
+                right: .1875em;
+                width: 1.375em
+            }
+        }
+
+        body.swal2-shown:not(.swal2-no-backdrop):not(.swal2-toast-shown) {
+            overflow: hidden
+        }
+
+        body.swal2-height-auto {
+            height: auto !important
+        }
+
+        body.swal2-no-backdrop .swal2-shown {
+            top: auto;
+            right: auto;
+            bottom: auto;
+            left: auto;
+            background-color: transparent
+        }
+
+        body.swal2-no-backdrop .swal2-shown>.swal2-modal {
+            box-shadow: 0 0 10px rgba(0, 0, 0, .4)
+        }
+
+        body.swal2-no-backdrop .swal2-shown.swal2-top {
+            top: 0;
+            left: 50%;
+            -webkit-transform: translateX(-50%);
+            transform: translateX(-50%)
+        }
+
+        body.swal2-no-backdrop .swal2-shown.swal2-top-left,
+        body.swal2-no-backdrop .swal2-shown.swal2-top-start {
+            top: 0;
+            left: 0
+        }
+
+        body.swal2-no-backdrop .swal2-shown.swal2-top-end,
+        body.swal2-no-backdrop .swal2-shown.swal2-top-right {
+            top: 0;
+            right: 0
+        }
+
+        body.swal2-no-backdrop .swal2-shown.swal2-center {
+            top: 50%;
+            left: 50%;
+            -webkit-transform: translate(-50%, -50%);
+            transform: translate(-50%, -50%)
+        }
+
+        body.swal2-no-backdrop .swal2-shown.swal2-center-left,
+        body.swal2-no-backdrop .swal2-shown.swal2-center-start {
+            top: 50%;
+            left: 0;
+            -webkit-transform: translateY(-50%);
+            transform: translateY(-50%)
+        }
+
+        body.swal2-no-backdrop .swal2-shown.swal2-center-end,
+        body.swal2-no-backdrop .swal2-shown.swal2-center-right {
+            top: 50%;
+            right: 0;
+            -webkit-transform: translateY(-50%);
+            transform: translateY(-50%)
+        }
+
+        body.swal2-no-backdrop .swal2-shown.swal2-bottom {
+            bottom: 0;
+            left: 50%;
+            -webkit-transform: translateX(-50%);
+            transform: translateX(-50%)
+        }
+
+        body.swal2-no-backdrop .swal2-shown.swal2-bottom-left,
+        body.swal2-no-backdrop .swal2-shown.swal2-bottom-start {
+            bottom: 0;
+            left: 0
+        }
+
+        body.swal2-no-backdrop .swal2-shown.swal2-bottom-end,
+        body.swal2-no-backdrop .swal2-shown.swal2-bottom-right {
+            right: 0;
+            bottom: 0
+        }
+
+        .swal2-container {
+            display: flex;
+            position: fixed;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            left: 0;
+            flex-direction: row;
+            align-items: center;
+            justify-content: center;
+            padding: 10px;
+            background-color: transparent;
+            z-index: 1060;
+            overflow-x: hidden;
+            -webkit-overflow-scrolling: touch
+        }
+
+        .swal2-container.swal2-top {
+            align-items: flex-start
+        }
+
+        .swal2-container.swal2-top-left,
+        .swal2-container.swal2-top-start {
+            align-items: flex-start;
+            justify-content: flex-start
+        }
+
+        .swal2-container.swal2-top-end,
+        .swal2-container.swal2-top-right {
+            align-items: flex-start;
+            justify-content: flex-end
+        }
+
+        .swal2-container.swal2-center {
+            align-items: center
+        }
+
+        .swal2-container.swal2-center-left,
+        .swal2-container.swal2-center-start {
+            align-items: center;
+            justify-content: flex-start
+        }
+
+        .swal2-container.swal2-center-end,
+        .swal2-container.swal2-center-right {
+            align-items: center;
+            justify-content: flex-end
+        }
+
+        .swal2-container.swal2-bottom {
+            align-items: flex-end
+        }
+
+        .swal2-container.swal2-bottom-left,
+        .swal2-container.swal2-bottom-start {
+            align-items: flex-end;
+            justify-content: flex-start
+        }
+
+        .swal2-container.swal2-bottom-end,
+        .swal2-container.swal2-bottom-right {
+            align-items: flex-end;
+            justify-content: flex-end
+        }
+
+        .swal2-container.swal2-grow-fullscreen>.swal2-modal {
+            display: flex !important;
+            flex: 1;
+            align-self: stretch;
+            justify-content: center
+        }
+
+        .swal2-container.swal2-grow-row>.swal2-modal {
+            display: flex !important;
+            flex: 1;
+            align-content: center;
+            justify-content: center
+        }
+
+        .swal2-container.swal2-grow-column {
+            flex: 1;
+            flex-direction: column
+        }
+
+        .swal2-container.swal2-grow-column.swal2-bottom,
+        .swal2-container.swal2-grow-column.swal2-center,
+        .swal2-container.swal2-grow-column.swal2-top {
+            align-items: center
+        }
+
+        .swal2-container.swal2-grow-column.swal2-bottom-left,
+        .swal2-container.swal2-grow-column.swal2-bottom-start,
+        .swal2-container.swal2-grow-column.swal2-center-left,
+        .swal2-container.swal2-grow-column.swal2-center-start,
+        .swal2-container.swal2-grow-column.swal2-top-left,
+        .swal2-container.swal2-grow-column.swal2-top-start {
+            align-items: flex-start
+        }
+
+        .swal2-container.swal2-grow-column.swal2-bottom-end,
+        .swal2-container.swal2-grow-column.swal2-bottom-right,
+        .swal2-container.swal2-grow-column.swal2-center-end,
+        .swal2-container.swal2-grow-column.swal2-center-right,
+        .swal2-container.swal2-grow-column.swal2-top-end,
+        .swal2-container.swal2-grow-column.swal2-top-right {
+            align-items: flex-end
+        }
+
+        .swal2-container.swal2-grow-column>.swal2-modal {
+            display: flex !important;
+            flex: 1;
+            align-content: center;
+            justify-content: center
+        }
+
+        .swal2-container:not(.swal2-top):not(.swal2-top-start):not(.swal2-top-end):not(.swal2-top-left):not(.swal2-top-right):not(.swal2-center-start):not(.swal2-center-end):not(.swal2-center-left):not(.swal2-center-right):not(.swal2-bottom):not(.swal2-bottom-start):not(.swal2-bottom-end):not(.swal2-bottom-left):not(.swal2-bottom-right):not(.swal2-grow-fullscreen)>.swal2-modal {
+            margin: auto
+        }
+
+        @media all and (-ms-high-contrast:none),
+        (-ms-high-contrast:active) {
+            .swal2-container .swal2-modal {
+                margin: 0 !important
+            }
+        }
+
+        .swal2-container.swal2-fade {
+            transition: background-color .1s
+        }
+
+        .swal2-container.swal2-shown {
+            background-color: rgba(0, 0, 0, .4)
+        }
+
+        .swal2-popup {
+            display: none;
+            position: relative;
+            flex-direction: column;
+            justify-content: center;
+            width: 32em;
+            max-width: 100%;
+            padding: 1.25em;
+            border-radius: .3125em;
+            background: #fff;
+            font-family: inherit;
+            font-size: 1rem;
+            box-sizing: border-box
+        }
+
+        .swal2-popup:focus {
+            outline: 0
+        }
+
+        .swal2-popup.swal2-loading {
+            overflow-y: hidden
+        }
+
+        .swal2-popup .swal2-header {
+            display: flex;
+            flex-direction: column;
+            align-items: center
+        }
+
+        .swal2-popup .swal2-title {
+            display: block;
+            position: relative;
+            max-width: 100%;
+            margin: 0 0 .4em;
+            padding: 0;
+            color: #595959;
+            font-size: 1.875em;
+            font-weight: 600;
+            text-align: center;
+            text-transform: none;
+            word-wrap: break-word
+        }
+
+        .swal2-popup .swal2-actions {
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: center;
+            margin: 1.25em auto 0;
+            z-index: 1
+        }
+
+        .swal2-popup .swal2-actions:not(.swal2-loading) .swal2-styled[disabled] {
+            opacity: .4
+        }
+
+        .swal2-popup .swal2-actions:not(.swal2-loading) .swal2-styled:hover {
+            background-image: linear-gradient(rgba(0, 0, 0, .1), rgba(0, 0, 0, .1))
+        }
+
+        .swal2-popup .swal2-actions:not(.swal2-loading) .swal2-styled:active {
+            background-image: linear-gradient(rgba(0, 0, 0, .2), rgba(0, 0, 0, .2))
+        }
+
+        .swal2-popup .swal2-actions.swal2-loading .swal2-styled.swal2-confirm {
+            width: 2.5em;
+            height: 2.5em;
+            margin: .46875em;
+            padding: 0;
+            border: .25em solid transparent;
+            border-radius: 100%;
+            border-color: transparent;
+            background-color: transparent !important;
+            color: transparent;
+            cursor: default;
+            box-sizing: border-box;
+            -webkit-animation: swal2-rotate-loading 1.5s linear 0s infinite normal;
+            animation: swal2-rotate-loading 1.5s linear 0s infinite normal;
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            user-select: none
+        }
+
+        .swal2-popup .swal2-actions.swal2-loading .swal2-styled.swal2-cancel {
+            margin-right: 30px;
+            margin-left: 30px
+        }
+
+        .swal2-popup .swal2-actions.swal2-loading :not(.swal2-styled).swal2-confirm::after {
+            display: inline-block;
+            width: 15px;
+            height: 15px;
+            margin-left: 5px;
+            border: 3px solid #999;
+            border-radius: 50%;
+            border-right-color: transparent;
+            box-shadow: 1px 1px 1px #fff;
+            content: '';
+            -webkit-animation: swal2-rotate-loading 1.5s linear 0s infinite normal;
+            animation: swal2-rotate-loading 1.5s linear 0s infinite normal
+        }
+
+        .swal2-popup .swal2-styled {
+            margin: .3125em;
+            padding: .625em 2em;
+            font-weight: 500;
+            box-shadow: none
+        }
+
+        .swal2-popup .swal2-styled:not([disabled]) {
+            cursor: pointer
+        }
+
+        .swal2-popup .swal2-styled.swal2-confirm {
+            border: 0;
+            border-radius: .25em;
+            background: initial;
+            background-color: #3085d6;
+            color: #fff;
+            font-size: 1.0625em
+        }
+
+        .swal2-popup .swal2-styled.swal2-cancel {
+            border: 0;
+            border-radius: .25em;
+            background: initial;
+            background-color: #aaa;
+            color: #fff;
+            font-size: 1.0625em
+        }
+
+        .swal2-popup .swal2-styled:focus {
+            outline: 0;
+            box-shadow: 0 0 0 2px #fff, 0 0 0 4px rgba(50, 100, 150, .4)
+        }
+
+        .swal2-popup .swal2-styled::-moz-focus-inner {
+            border: 0
+        }
+
+        .swal2-popup .swal2-footer {
+            justify-content: center;
+            margin: 1.25em 0 0;
+            padding: 1em 0 0;
+            border-top: 1px solid #eee;
+            color: #545454;
+            font-size: 1em
+        }
+
+        .swal2-popup .swal2-image {
+            max-width: 100%;
+            margin: 1.25em auto
+        }
+
+        .swal2-popup .swal2-close {
+            position: absolute;
+            top: 0;
+            right: 0;
+            justify-content: center;
+            width: 1.2em;
+            height: 1.2em;
+            padding: 0;
+            transition: color .1s ease-out;
+            border: none;
+            border-radius: 0;
+            outline: initial;
+            background: 0 0;
+            color: #ccc;
+            font-family: serif;
+            font-size: 2.5em;
+            line-height: 1.2;
+            cursor: pointer;
+            overflow: hidden
+        }
+
+        .swal2-popup .swal2-close:hover {
+            -webkit-transform: none;
+            transform: none;
+            color: #f27474
+        }
+
+        .swal2-popup>.swal2-checkbox,
+        .swal2-popup>.swal2-file,
+        .swal2-popup>.swal2-input,
+        .swal2-popup>.swal2-radio,
+        .swal2-popup>.swal2-select,
+        .swal2-popup>.swal2-textarea {
+            display: none
+        }
+
+        .swal2-popup .swal2-content {
+            justify-content: center;
+            margin: 0;
+            padding: 0;
+            color: #545454;
+            font-size: 1.125em;
+            font-weight: 300;
+            line-height: normal;
+            z-index: 1;
+            word-wrap: break-word
+        }
+
+        .swal2-popup #swal2-content {
+            text-align: center
+        }
+
+        .swal2-popup .swal2-checkbox,
+        .swal2-popup .swal2-file,
+        .swal2-popup .swal2-input,
+        .swal2-popup .swal2-radio,
+        .swal2-popup .swal2-select,
+        .swal2-popup .swal2-textarea {
+            margin: 1em auto
+        }
+
+        .swal2-popup .swal2-file,
+        .swal2-popup .swal2-input,
+        .swal2-popup .swal2-textarea {
+            width: 100%;
+            transition: border-color .3s, box-shadow .3s;
+            border: 1px solid #d9d9d9;
+            border-radius: .1875em;
+            font-size: 1.125em;
+            box-shadow: inset 0 1px 1px rgba(0, 0, 0, .06);
+            box-sizing: border-box
+        }
+
+        .swal2-popup .swal2-file.swal2-inputerror,
+        .swal2-popup .swal2-input.swal2-inputerror,
+        .swal2-popup .swal2-textarea.swal2-inputerror {
+            border-color: #f27474 !important;
+            box-shadow: 0 0 2px #f27474 !important
+        }
+
+        .swal2-popup .swal2-file:focus,
+        .swal2-popup .swal2-input:focus,
+        .swal2-popup .swal2-textarea:focus {
+            border: 1px solid #b4dbed;
+            outline: 0;
+            box-shadow: 0 0 3px #c4e6f5
+        }
+
+        .swal2-popup .swal2-file::-webkit-input-placeholder,
+        .swal2-popup .swal2-input::-webkit-input-placeholder,
+        .swal2-popup .swal2-textarea::-webkit-input-placeholder {
+            color: #ccc
+        }
+
+        .swal2-popup .swal2-file:-ms-input-placeholder,
+        .swal2-popup .swal2-input:-ms-input-placeholder,
+        .swal2-popup .swal2-textarea:-ms-input-placeholder {
+            color: #ccc
+        }
+
+        .swal2-popup .swal2-file::-ms-input-placeholder,
+        .swal2-popup .swal2-input::-ms-input-placeholder,
+        .swal2-popup .swal2-textarea::-ms-input-placeholder {
+            color: #ccc
+        }
+
+        .swal2-popup .swal2-file::placeholder,
+        .swal2-popup .swal2-input::placeholder,
+        .swal2-popup .swal2-textarea::placeholder {
+            color: #ccc
+        }
+
+        .swal2-popup .swal2-range input {
+            width: 80%
+        }
+
+        .swal2-popup .swal2-range output {
+            width: 20%;
+            font-weight: 600;
+            text-align: center
+        }
+
+        .swal2-popup .swal2-range input,
+        .swal2-popup .swal2-range output {
+            height: 2.625em;
+            margin: 1em auto;
+            padding: 0;
+            font-size: 1.125em;
+            line-height: 2.625em
+        }
+
+        .swal2-popup .swal2-input {
+            height: 2.625em;
+            padding: 0 .75em
+        }
+
+        .swal2-popup .swal2-input[type=number] {
+            max-width: 10em
+        }
+
+        .swal2-popup .swal2-file {
+            font-size: 1.125em
+        }
+
+        .swal2-popup .swal2-textarea {
+            height: 6.75em;
+            padding: .75em
+        }
+
+        .swal2-popup .swal2-select {
+            min-width: 50%;
+            max-width: 100%;
+            padding: .375em .625em;
+            color: #545454;
+            font-size: 1.125em
+        }
+
+        .swal2-popup .swal2-checkbox,
+        .swal2-popup .swal2-radio {
+            align-items: center;
+            justify-content: center
+        }
+
+        .swal2-popup .swal2-checkbox label,
+        .swal2-popup .swal2-radio label {
+            margin: 0 .6em;
+            font-size: 1.125em
+        }
+
+        .swal2-popup .swal2-checkbox input,
+        .swal2-popup .swal2-radio input {
+            margin: 0 .4em
+        }
+
+        .swal2-popup .swal2-validation-message {
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: .625em;
+            background: #f0f0f0;
+            color: #666;
+            font-size: 1em;
+            font-weight: 300;
+            overflow: hidden
+        }
+
+        .swal2-popup .swal2-validation-message::before {
+            display: inline-block;
+            width: 1.5em;
+            min-width: 1.5em;
+            height: 1.5em;
+            margin: 0 .625em;
+            border-radius: 50%;
+            background-color: #f27474;
+            color: #fff;
+            font-weight: 600;
+            line-height: 1.5em;
+            text-align: center;
+            content: '!';
+            zoom: normal
+        }
+
+        @supports (-ms-accelerator:true) {
+            .swal2-range input {
+                width: 100% !important
+            }
+
+            .swal2-range output {
+                display: none
+            }
+        }
+
+        @media all and (-ms-high-contrast:none),
+        (-ms-high-contrast:active) {
+            .swal2-range input {
+                width: 100% !important
+            }
+
+            .swal2-range output {
+                display: none
+            }
+        }
+
+        @-moz-document url-prefix() {
+            .swal2-close:focus {
+                outline: 2px solid rgba(50, 100, 150, .4)
+            }
+        }
+
+        .swal2-icon {
+            position: relative;
+            justify-content: center;
+            width: 5em;
+            height: 5em;
+            margin: 1.25em auto 1.875em;
+            border: .25em solid transparent;
+            border-radius: 50%;
+            line-height: 5em;
+            cursor: default;
+            box-sizing: content-box;
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
+            zoom: normal
+        }
+
+        .swal2-icon-text {
+            font-size: 3.75em
+        }
+
+        .swal2-icon.swal2-error {
+            border-color: #f27474
+        }
+
+        .swal2-icon.swal2-error .swal2-x-mark {
+            position: relative;
+            flex-grow: 1
+        }
+
+        .swal2-icon.swal2-error [class^=swal2-x-mark-line] {
+            display: block;
+            position: absolute;
+            top: 2.3125em;
+            width: 2.9375em;
+            height: .3125em;
+            border-radius: .125em;
+            background-color: #f27474
+        }
+
+        .swal2-icon.swal2-error [class^=swal2-x-mark-line][class$=left] {
+            left: 1.0625em;
+            -webkit-transform: rotate(45deg);
+            transform: rotate(45deg)
+        }
+
+        .swal2-icon.swal2-error [class^=swal2-x-mark-line][class$=right] {
+            right: 1em;
+            -webkit-transform: rotate(-45deg);
+            transform: rotate(-45deg)
+        }
+
+        .swal2-icon.swal2-warning {
+            border-color: #facea8;
+            color: #f8bb86
+        }
+
+        .swal2-icon.swal2-info {
+            border-color: #9de0f6;
+            color: #3fc3ee
+        }
+
+        .swal2-icon.swal2-question {
+            border-color: #c9dae1;
+            color: #87adbd
+        }
+
+        .swal2-icon.swal2-success {
+            border-color: #a5dc86
+        }
+
+        .swal2-icon.swal2-success [class^=swal2-success-circular-line] {
+            position: absolute;
+            width: 3.75em;
+            height: 7.5em;
+            -webkit-transform: rotate(45deg);
+            transform: rotate(45deg);
+            border-radius: 50%
+        }
+
+        .swal2-icon.swal2-success [class^=swal2-success-circular-line][class$=left] {
+            top: -.4375em;
+            left: -2.0635em;
+            -webkit-transform: rotate(-45deg);
+            transform: rotate(-45deg);
+            -webkit-transform-origin: 3.75em 3.75em;
+            transform-origin: 3.75em 3.75em;
+            border-radius: 7.5em 0 0 7.5em
+        }
+
+        .swal2-icon.swal2-success [class^=swal2-success-circular-line][class$=right] {
+            top: -.6875em;
+            left: 1.875em;
+            -webkit-transform: rotate(-45deg);
+            transform: rotate(-45deg);
+            -webkit-transform-origin: 0 3.75em;
+            transform-origin: 0 3.75em;
+            border-radius: 0 7.5em 7.5em 0
+        }
+
+        .swal2-icon.swal2-success .swal2-success-ring {
+            position: absolute;
+            top: -.25em;
+            left: -.25em;
+            width: 100%;
+            height: 100%;
+            border: .25em solid rgba(165, 220, 134, .3);
+            border-radius: 50%;
+            z-index: 2;
+            box-sizing: content-box
+        }
+
+        .swal2-icon.swal2-success .swal2-success-fix {
+            position: absolute;
+            top: .5em;
+            left: 1.625em;
+            width: .4375em;
+            height: 5.625em;
+            -webkit-transform: rotate(-45deg);
+            transform: rotate(-45deg);
+            z-index: 1
+        }
+
+        .swal2-icon.swal2-success [class^=swal2-success-line] {
+            display: block;
+            position: absolute;
+            height: .3125em;
+            border-radius: .125em;
+            background-color: #a5dc86;
+            z-index: 2
+        }
+
+        .swal2-icon.swal2-success [class^=swal2-success-line][class$=tip] {
+            top: 2.875em;
+            left: .875em;
+            width: 1.5625em;
+            -webkit-transform: rotate(45deg);
+            transform: rotate(45deg)
+        }
+
+        .swal2-icon.swal2-success [class^=swal2-success-line][class$=long] {
+            top: 2.375em;
+            right: .5em;
+            width: 2.9375em;
+            -webkit-transform: rotate(-45deg);
+            transform: rotate(-45deg)
+        }
+
+        .swal2-progresssteps {
+            align-items: center;
+            margin: 0 0 1.25em;
+            padding: 0;
+            font-weight: 600
+        }
+
+        .swal2-progresssteps li {
+            display: inline-block;
+            position: relative
+        }
+
+        .swal2-progresssteps .swal2-progresscircle {
+            width: 2em;
+            height: 2em;
+            border-radius: 2em;
+            background: #3085d6;
+            color: #fff;
+            line-height: 2em;
+            text-align: center;
+            z-index: 20
+        }
+
+        .swal2-progresssteps .swal2-progresscircle:first-child {
+            margin-left: 0
+        }
+
+        .swal2-progresssteps .swal2-progresscircle:last-child {
+            margin-right: 0
+        }
+
+        .swal2-progresssteps .swal2-progresscircle.swal2-activeprogressstep {
+            background: #3085d6
+        }
+
+        .swal2-progresssteps .swal2-progresscircle.swal2-activeprogressstep~.swal2-progresscircle {
+            background: #add8e6
+        }
+
+        .swal2-progresssteps .swal2-progresscircle.swal2-activeprogressstep~.swal2-progressline {
+            background: #add8e6
+        }
+
+        .swal2-progresssteps .swal2-progressline {
+            width: 2.5em;
+            height: .4em;
+            margin: 0 -1px;
+            background: #3085d6;
+            z-index: 10
+        }
+
+        [class^=swal2] {
+            -webkit-tap-highlight-color: transparent
+        }
+
+        .swal2-show {
+            -webkit-animation: swal2-show .3s;
+            animation: swal2-show .3s
+        }
+
+        .swal2-show.swal2-noanimation {
+            -webkit-animation: none;
+            animation: none
+        }
+
+        .swal2-hide {
+            -webkit-animation: swal2-hide .15s forwards;
+            animation: swal2-hide .15s forwards
+        }
+
+        .swal2-hide.swal2-noanimation {
+            -webkit-animation: none;
+            animation: none
+        }
+
+        .swal2-rtl .swal2-close {
+            right: auto;
+            left: 0
+        }
+
+        .swal2-animate-success-icon .swal2-success-line-tip {
+            -webkit-animation: swal2-animate-success-line-tip .75s;
+            animation: swal2-animate-success-line-tip .75s
+        }
+
+        .swal2-animate-success-icon .swal2-success-line-long {
+            -webkit-animation: swal2-animate-success-line-long .75s;
+            animation: swal2-animate-success-line-long .75s
+        }
+
+        .swal2-animate-success-icon .swal2-success-circular-line-right {
+            -webkit-animation: swal2-rotate-success-circular-line 4.25s ease-in;
+            animation: swal2-rotate-success-circular-line 4.25s ease-in
+        }
+
+        .swal2-animate-error-icon {
+            -webkit-animation: swal2-animate-error-icon .5s;
+            animation: swal2-animate-error-icon .5s
+        }
+
+        .swal2-animate-error-icon .swal2-x-mark {
+            -webkit-animation: swal2-animate-error-x-mark .5s;
+            animation: swal2-animate-error-x-mark .5s
+        }
+
+        @-webkit-keyframes swal2-rotate-loading {
+            0% {
+                -webkit-transform: rotate(0);
+                transform: rotate(0)
+            }
+
+            100% {
+                -webkit-transform: rotate(360deg);
+                transform: rotate(360deg)
+            }
+        }
+
+        @keyframes swal2-rotate-loading {
+            0% {
+                -webkit-transform: rotate(0);
+                transform: rotate(0)
+            }
+
+            100% {
+                -webkit-transform: rotate(360deg);
+                transform: rotate(360deg)
+            }
+        }
+
+        @media print {
+            body.swal2-shown:not(.swal2-no-backdrop):not(.swal2-toast-shown) {
+                overflow-y: scroll !important
+            }
+
+            body.swal2-shown:not(.swal2-no-backdrop):not(.swal2-toast-shown)>[aria-hidden=true] {
+                display: none
+            }
+
+            body.swal2-shown:not(.swal2-no-backdrop):not(.swal2-toast-shown) .swal2-container {
+                position: initial !important
+            }
+        }
+    </style>
+    <style>
+        .ejoy-sub-active {
+            color: #1296ba !important;
+        }
+
+        .ejoy-sub-hovered {
+            color: #1296ba !important;
+        }
+
+        .ejoy-sub-clzz {
+            cursor: pointer;
+
+            lineHeight: 1.2;
+            font-size: 28px;
+            color: #FFCC00;
+            background: rgba(17, 17, 17, 0.7);
+
+        }
+
+        .ejoy-sub-clzz:hover {
+            color: #1296ba !important;
+        }
+
+        .ej-trans-sub {
+            position: absolute;
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999999;
+            cursor: move;
+        }
+
+        .ej-trans-sub>span {
+            color: #3CF9ED;
+            font-size: 18px;
+            text-align: center;
+            padding: 0 16px;
+            line-height: 1.5;
+            background: rgba(32, 26, 25, 0.8);
+            // text-shadow: 0px 1px 4px black;
+            padding: 0 8px;
+
+            lineHeight: 1.2;
+            font-size: 16px;
+            color: #0CB1C7;
+            background: rgba(67, 65, 65, 0.7);
+
+        }
+
+        .ej-full-screen-video {
+            position: absolute;
+            width: 30px;
+            height: 30px;
+            top: 30px;
+            right: 10px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 99999999;
+            cursor: pointer;
+        }
+
+        .ej-main-sub {
+            position: absolute;
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 99999999;
+            cursor: move;
+            padding: 0 8px;
+        }
+
+        .ej-main-sub>span {
+            color: white;
+            font-size: 20px;
+            line-height: 1.5;
+            text-align: center;
+            background: rgba(32, 26, 25, 0.8);
+            padding: 2px 8px;
+
+            lineHeight: 1.2;
+            font-size: 28px;
+            color: #FFCC00;
+            background: rgba(17, 17, 17, 0.7);
+
+        }
+
+        .ej-main-sub .ejoy-sub-clzz {
+            background: transparent !important
+        }
+
+        .tran-subtitle>span {
+            cursor: pointer;
+            padding-left: 10px;
+            top: 2px;
+            position: relative;
+        }
+
+        .tran-subtitle>span>span {
+            position: absolute;
+            top: -170%;
+            background: rgba(0, 0, 0, 0.5);
+            font-size: 13px;
+            line-height: 20px;
+            padding: 2px 8px;
+            color: white;
+            display: none;
+            border-radius: 4px;
+            white-space: nowrap;
+            left: -50%;
+            font-weight: normal;
+        }
+
+        .view-icon-copy-main-sub:hover>span,
+        .view-icon-edit-sub:hover>span,
+        .view-icon-exit-full-sub:hover>span,
+        .view-icon-full-sub:hover>span,
+        .view-icon-copy-tran-sub:hover>span {
+            display: block;
+        }
+
+        .view-icon-full-sub,
+        .view-icon-exit-full-sub {
+            display: flex;
+        }
+
+        .view-icon-full-sub>svg,
+        .view-icon-exit-full-sub>svg {
+            pointer-events: none;
+        }
+
+        .tran-subtitle>span>svg {
+            width: 16px;
+            height: 16px;
+            pointer-events: none;
+            display: inline-flex !important;
+            vertical-align: baseline !important;
+        }
+
+        .view-icon-copy-main-sub>svg {
+            pointer-events: none;
+            color: #FFCC00
+        }
+
+        .view-icon-copy-tran-sub {
+            padding-left: 0 !important;
+            padding-right: 8px !important;
+        }
+
+        .view-icon-copy-tran-sub>svg {
+            pointer-events: none;
+            color: #0CB1C7
+        }
+    </style>
+</head>
+
+<body id="home"
+    bis_register="W3sibWFzdGVyIjp0cnVlLCJleHRlbnNpb25JZCI6ImVwcGlvY2VtaG1ubGJoanBsY2drb2ZjaWllZ29tY29uIiwiYWRibG9ja2VyU3RhdHVzIjp7IkRJU1BMQVkiOiJkaXNhYmxlZCIsIkZBQ0VCT09LIjoiZGlzYWJsZWQiLCJUV0lUVEVSIjoiZGlzYWJsZWQiLCJSRURESVQiOiJkaXNhYmxlZCJ9LCJ2ZXJzaW9uIjoiMS45LjA5Iiwic2NvcmUiOjEwOTA5fV0="
+    data-new-gr-c-s-check-loaded="14.1103.0" data-gr-ext-installed="" cz-shortcut-listen="true">
+    <div class="page-wrapper" bis_skin_checked="1">
+        <div class="preloader" bis_skin_checked="1" style="display: none;">
+            <div class="inner" bis_skin_checked="1">
+                <span class="icon"><i class="fi flaticon-two"></i></span>
+            </div>
+        </div>
+        <section class="hero">
+            <img style="width: 100%; height: 100%; object-fit: cover;" src="./assets/anh-ngang-1.png" alt="wedding">
+            <div style="position: absolute;top: 0;left: 0;right: 0;bottom: 0;background: rgba(0,0,0,0.3);"></div>
+
+            <!-- <div class=" hero-slider hero-slider-s1 slick-initialized slick-slider slick-dotted"
+                    bis_skin_checked="1" role="toolbar">
+                <button type="button" class="slick-prev slick-arrow" style="display: block;">Previous</button>
+                <div aria-live="polite" class="slick-list draggable" bis_skin_checked="1">
+                    <div class="slick-track" role="listbox" style="opacity: 1; width: 1954px;" bis_skin_checked="1">
+                        <div class="slide-item slick-slide slick-current slick-active" bis_skin_checked="1"
+                            style="background-image: url(&quot;https://biihappycom.sgp1.vultrobjects.com/ziiweb/website/63a6728167b480329c7d64ef/templates/61338a310cf1357216675f18/27c004348324e6a740dc9514c456e0e2.jpg&quot;); background-size: cover; background-position: center center; width: 977px; position: relative; left: 0px; top: 0px; z-index: 999; opacity: 1;"
+                            data-slick-index="0" aria-hidden="false" tabindex="-1" role="option"
+                            aria-describedby="slick-slide00">
+                            <img src="./assets/27c004348324e6a740dc9514c456e0e2.jpg"
+                                alt="Văn Mười &amp; Thị Chuộng Wedding site!" class="slider-bg">
+                        </div>
+                        <div class="slide-item slick-slide"
+                            style="background-image: url(&quot;https://biihappycom.sgp1.vultrobjects.com/ziiweb/website/63a6728167b480329c7d64ef/templates/61338a310cf1357216675f18/7c7a04083c52d1a48bf4af7f63eb7e46.jpg&quot;); background-size: cover; background-position: center center; width: 977px; position: relative; left: -977px; top: 0px; z-index: 998; opacity: 0; transition: opacity 500ms linear 0s;"
+                            bis_skin_checked="1" data-slick-index="1" aria-hidden="true" tabindex="-1" role="option"
+                            aria-describedby="slick-slide01">
+                            <img src="./assets/7c7a04083c52d1a48bf4af7f63eb7e46.jpg"
+                                alt="Văn Mười &amp; Thị Chuộng Wedding site!" class="slider-bg">
+                        </div>
+                    </div>
+                </div>
+
+
+                <button type="button" class="slick-next slick-arrow" style="display: block;">Next</button>
+                <ul class="slick-dots" style="display: block;" role="tablist">
+                    <li class="slick-active" aria-hidden="false" role="presentation" aria-selected="true"
+                        aria-controls="navigation00" id="slick-slide00"><button type="button" data-role="none"
+                            role="button" tabindex="0">1</button></li>
+                    <li aria-hidden="true" role="presentation" aria-selected="false" aria-controls="navigation01"
+                        id="slick-slide01" class=""><button type="button" data-role="none" role="button"
+                            tabindex="0">2</button></li>
+                </ul>
+            </div> -->
+            <div class="wedding-announcement" bis_skin_checked="1">
+                <div class="couple-name-merried-text" bis_skin_checked="1">
+                    <h2 class="wow slideInUp" data-wow-duration="1s"
+                        style="visibility: visible; animation-duration: 1s; animation-name: slideInUp;">Văn Mười
+                        &amp; Thị Chuộng</h2>
+                    <div class="married-text wow fadeIn" data-wow-delay="1s" bis_skin_checked="1"
+                        style="visibility: visible; animation-delay: 1s; animation-name: fadeIn;">
+                        <h4 class="wow fadeIn" data-wow-delay="1s"
+                            style="visibility: visible; animation-delay: 1s; animation-name: fadeIn;">We're getting
+                            married</h4>
+                    </div>
+                    <i class="fa fa-heart"></i>
+                </div>
+
+                <div class="save-the-date popup-save-the-date" bis_skin_checked="1">
+                    <h4>Save the date</h4>
+                    <span class="date">15 April 2023</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- TODO: sửa chữ navbar -->
+        <header id="header" class="site-header header-style-1">
+            <nav class="navigation navbar navbar-default original" style="visibility: visible;">
+                <div class="container" bis_skin_checked="1">
+                    <div class="navbar-header" bis_skin_checked="1">
+                        <button type="button" class="open-btn">
+                            <span class="sr-only">Toggle navigation</span>
+                            <span class="icon-bar"></span>
+                            <span class="icon-bar"></span>
+                            <span class="icon-bar"></span>
+                        </button>
+                        <div class="couple-logo" bis_skin_checked="1">
+                            <h1><a style="display: flex; align-items: center; gap: 6px" href="#home"
+                                    bis_skin_checked="1">M <img style="width: 26px;height: 26px;object-fit: cover;"
+                                        src="./assets/heart-1.png" alt="heart"> C</a></h1>
+                        </div>
+                    </div>
+                    <div id="navbar" class="navbar-collapse collapse navbar-right navigation-holder"
+                        bis_skin_checked="1">
+                        <button class="close-navbar">x</button>
+                        <ul class="nav navbar-nav small-nav">
+                            <li class=""><a href="#couple" bis_skin_checked="1">Cặp đôi</a></li>
+
+                            <li class=""><a href="#story" bis_skin_checked="1">Chuyện tình yêu</a>
+                            </li>
+
+                            <li class=""><a href="#events" bis_skin_checked="1">Sự kiện</a></li>
+
+
+                            <li class=""><a href="#gallery" bis_skin_checked="1">Album cưới</a>
+                            </li>
+
+                            <!-- <li><a href="#rsvp" bis_skin_checked="1">Lời chúc</a></li>
+
+                            <li><a href="javascript:void(0)" class="buttonDonate" bis_skin_checked="1">Mừng cưới</a> -->
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </nav>
+            <nav class="navigation navbar navbar-default sticky" style="width: 1910px;">
+                <div class="container" bis_skin_checked="1">
+                    <div class="navbar-header" bis_skin_checked="1">
+                        <button type="button" class="open-btn">
+                            <span class="sr-only">Toggle navigation</span>
+                            <span class="icon-bar"></span>
+                            <span class="icon-bar"></span>
+                            <span class="icon-bar"></span>
+                        </button>
+                        <div class="couple-logo" bis_skin_checked="1">
+                            <h1><a style="display: flex; align-items: center; gap: 6px" href="#home"
+                                    bis_skin_checked="1">M <img style="width: 26px;height: 26px;object-fit: cover;"
+                                        src="./assets/heart-1.png" alt="heart"> C</a>
+                            </h1>
+                        </div>
+                    </div>
+                    <div id="navbar" class="navbar-collapse collapse navbar-right navigation-holder"
+                        bis_skin_checked="1">
+                        <button class="close-navbar">x</button>
+                        <ul class="nav navbar-nav small-nav">
+                            <li class=""><a href="#couple" bis_skin_checked="1">Cặp đôi</a></li>
+
+                            <li class=""><a href="#story" bis_skin_checked="1">Chuyện tình yêu</a>
+                            </li>
+
+                            <li class=""><a href="#events" bis_skin_checked="1">Sự kiện</a></li>
+
+
+                            <li class=""><a href="#gallery" bis_skin_checked="1">Album cưới</a>
+                            </li>
+
+                            <!-- <li><a href="#rsvp" bis_skin_checked="1">Lời chúc</a></li>
+
+                            <li><a href="javascript:void(0)" class="buttonDonate" bis_skin_checked="1">Mừng cưới</a> -->
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </nav>
+        </header>
+        <section class="wedding-couple-section section-padding" id="couple">
+            <div class="container" bis_skin_checked="1">
+                <div class="row" bis_skin_checked="1">
+                    <div class="col col-xs-12" bis_skin_checked="1">
+                        <div class="gb groom" bis_skin_checked="1">
+                            <div class="img-holder wow fadeInLeftSlow"
+                                style="position: relative; background-image: url(&quot;https://biihappycom.sgp1.vultrobjects.com/ziiweb/website/63a6728167b480329c7d64ef/f51cd862a5a356f7c4ac0198f3a9c699.jpeg&quot;); background-size: cover; background-position: center center; visibility: visible; animation-name: fadeInLeftSlow;"
+                                bis_skin_checked="1">
+                                <div style="position: absolute;width: 98%;height: 98%;top: 1%;left: 1%;border: 2px solid #fff;"
+                                    bis_skin_checked="1"></div>
+                                <img src="./assets/chu-re.png" alt="">
+                            </div>
+                            <div class="details" style="height: 571px;" bis_skin_checked="1">
+                                <div class="details-inner" bis_skin_checked="1">
+                                    <h3>Chú rể</h3>
+                                    <!-- <p>Chuyên viên Marketing 20 tuổi tại Hà Nội</p> -->
+                                    <span class="signature">Nguyễn Văn Mười</span>
+                                    <!-- <ul class="social-links">
+                                        <li><a href="https://www.facebook.com/asktinh/" target="_blank"
+                                                bis_skin_checked="1"><i class="fa fa-facebook"></i></a></li>
+                                        <li><a href="http://tinhtrang.net/" target="_blank"><i
+                                                    class="fa fa-twitter"></i></a></li>
+                                        <li><a href="http://tinhtrang.net/" target="_blank"><i
+                                                    class="fa fa-instagram"></i></a></li>
+                                    </ul> -->
+                                </div>
+                            </div>
+                        </div>
+                        <div class="gb bride" bis_skin_checked="1">
+                            <div class="details" style="height: 571px;" bis_skin_checked="1">
+                                <div class="details-inner" bis_skin_checked="1">
+                                    <h3>Cô dâu</h3>
+                                    <!-- <p>Học Sư Phạm Vật Lý tại Trường Đại học Thủ đô Hà Nội</p> -->
+                                    <span class="signature">Cao Thị Chuộng</span>
+                                    <!-- <ul class="social-links">
+                                        <li><a href="https://www.facebook.com/trang.nguyenthu.16568548" target="_blank"
+                                                bis_skin_checked="1"><i class="fa fa-facebook"></i></a></li>
+                                        <li><a href="http://tinhtrang.net/" target="_blank"><i
+                                                    class="fa fa-twitter"></i></a></li>
+                                        <li><a href="http://tinhtrang.net/" target="_blank"><i
+                                                    class="fa fa-instagram"></i></a></li>
+                                    </ul> -->
+                                </div>
+                            </div>
+                            <div class="img-holder wow fadeInRightSlow"
+                                style="position: relative; background-image: url(&quot;https://biihappycom.sgp1.vultrobjects.com/ziiweb/website/63a6728167b480329c7d64ef/57306f51402a9373d1ab48eb56110852.jpeg&quot;); background-size: cover; background-position: center center; visibility: visible; animation-name: fadeInRightSlow;"
+                                bis_skin_checked="1">
+                                <div style="position: absolute;width: 98%;height: 98%;top: 1%;left: 1%;border: 2px solid #fff;"
+                                    bis_skin_checked="1"></div>
+                                <img src="./assets/co-dau.png" alt="">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="section-accessibilities">
+            <div class="container" bis_skin_checked="1">
+                <div class="row button-accessibilities" bis_skin_checked="1">
+                    <div class="col col-lg-12" bis_skin_checked="1">
+                        <!-- <div class="text-center btn-container" bis_skin_checked="1">
+                            <a href="http://tinhtrang.net/#rsvp" class="accessibility-btn btn btn-danger btn-sm"
+                                bis_skin_checked="1">
+                                <span class="content-button">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor"
+                                        class="bi bi-chat" viewBox="0 0 16 16">
+                                        <path
+                                            d="M2.678 11.894a1 1 0 0 1 .287.801 10.97 10.97 0 0 1-.398 2c1.395-.323 2.247-.697 2.634-.893a1 1 0 0 1 .71-.074A8.06 8.06 0 0 0 8 14c3.996 0 7-2.807 7-6 0-3.192-3.004-6-7-6S1 4.808 1 8c0 1.468.617 2.83 1.678 3.894zm-.493 3.905a21.682 21.682 0 0 1-.713.129c-.2.032-.352-.176-.273-.362a9.68 9.68 0 0 0 .244-.637l.003-.01c.248-.72.45-1.548.524-2.319C.743 11.37 0 9.76 0 8c0-3.866 3.582-7 8-7s8 3.134 8 7-3.582 7-8 7a9.06 9.06 0 0 1-2.347-.306c-.52.263-1.639.742-3.468 1.105z">
+                                        </path>
+                                    </svg>
+                                    Gửi lời chúc
+                                </span>
+                            </a>
+                            <a href="http://tinhtrang.net/rsvp" target="_blank"
+                                class="accessibility-btn btn btn-danger btn-sm" bis_skin_checked="1">
+                                <span class="content-button">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor"
+                                        class="bi bi-send" viewBox="0 0 16 16">
+                                        <path
+                                            d="M15.854.146a.5.5 0 0 1 .11.54l-5.819 14.547a.75.75 0 0 1-1.329.124l-3.178-4.995L.643 7.184a.75.75 0 0 1 .124-1.33L15.314.037a.5.5 0 0 1 .54.11ZM6.636 10.07l2.761 4.338L14.13 2.576 6.636 10.07Zm6.787-8.201L1.591 6.602l4.339 2.76 7.494-7.493Z">
+                                        </path>
+                                    </svg>
+                                    Xác nhận tham dự
+                                </span>
+                            </a>
+                            <a href="javascript:void(0)" class="accessibility-btn btn btn-danger btn-sm buttonDonate"
+                                bis_skin_checked="1">
+                                <span class="content-button">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor"
+                                        class="bi bi-coin" viewBox="0 0 16 16">
+                                        <path
+                                            d="M5.5 9.511c.076.954.83 1.697 2.182 1.785V12h.6v-.709c1.4-.098 2.218-.846 2.218-1.932 0-.987-.626-1.496-1.745-1.76l-.473-.112V5.57c.6.068.982.396 1.074.85h1.052c-.076-.919-.864-1.638-2.126-1.716V4h-.6v.719c-1.195.117-2.01.836-2.01 1.853 0 .9.606 1.472 1.613 1.707l.397.098v2.034c-.615-.093-1.022-.43-1.114-.9H5.5zm2.177-2.166c-.59-.137-.91-.416-.91-.836 0-.47.345-.822.915-.925v1.76h-.005zm.692 1.193c.717.166 1.048.435 1.048.91 0 .542-.412.914-1.135.982V8.518l.087.02z">
+                                        </path>
+                                        <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z">
+                                        </path>
+                                        <path
+                                            d="M8 13.5a5.5 5.5 0 1 1 0-11 5.5 5.5 0 0 1 0 11zm0 .5A6 6 0 1 0 8 2a6 6 0 0 0 0 12z">
+                                        </path>
+                                    </svg>
+                                    Mừng cưới
+                                </span>
+                            </a>
+                        </div> -->
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="count-down-section section-padding parallax"
+            data-bg-image="https://biihappycom.sgp1.vultrobjects.com/ziiweb/website/63a6728167b480329c7d64ef/templates/61338a310cf1357216675f18/cdc10f48c3161cd39ed2405f8f31e1a1.jpg"
+            data-speed="3"
+            style="background-image: url(&quot;https://biihappycom.sgp1.vultrobjects.com/ziiweb/website/63a6728167b480329c7d64ef/templates/61338a310cf1357216675f18/cdc10f48c3161cd39ed2405f8f31e1a1.jpg&quot;); background-position: 50% calc(50% - -825.667px); background-size: cover;">
+            <div class="container" bis_skin_checked="1">
+                <div class="row" bis_skin_checked="1">
+                    <div class="col col-md-4" bis_skin_checked="1">
+                        <h2><span>Counting the minutes for.....</span> The big day </h2>
+                    </div>
+                    <div class="col col-md-7 col-md-offset-1" bis_skin_checked="1">
+                        <div class="count-down-clock" bis_skin_checked="1">
+                            <div id="clock" data-date="2023-01-07" data-text-day="Ngày" data-text-hour="Giờ"
+                                data-text-minute="Phút" data-text-second="Giây" bis_skin_checked="1">
+                                <div class="box">
+                                    <div>92</div> <span>Ngày</span>
+                                </div>
+                                <div class="box">
+                                    <div>21</div> <span>Giờ</span>
+                                </div>
+                                <div class="box">
+                                    <div>53</div> <span>Phút</span>
+                                </div>
+                                <div class="box">
+                                    <div>13</div> <span>Giây</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="story-section section-padding" id="story">
+            <div class="container" bis_skin_checked="1">
+                <div class="row" bis_skin_checked="1">
+                    <div class="col col-xs-12" bis_skin_checked="1">
+                        <div class="section-title" bis_skin_checked="1">
+                            <div class="vertical-line" bis_skin_checked="1"><span><i class="fi flaticon-two"></i></span>
+                            </div>
+                            <h2>Chuyện tình yêu</h2>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row text-holder" bis_skin_checked="1">
+                    <div class="col col-xs-12" bis_skin_checked="1">
+                        <div class="story-timeline" bis_skin_checked="1">
+                            <div class="row" bis_skin_checked="1">
+                                <div class="col col-md-6 text-holder right-heart" bis_skin_checked="1">
+                                    <span class="heart">
+                                        <i class="fa fa-heart"></i>
+                                    </span>
+                                    <div class="story-text right-align-text" bis_skin_checked="1">
+                                        <h3>Lời tỏ tình dễ thương^^</h3>
+                                        <span class="date">Tháng 11 năm 2021</span>
+                                        <p>Bất kể bạn gặp ai, đó đều là người bạn cần gặp. Bất kể chuyện bắt đầu từ đâu,
+                                            đó đều là thời điểm thích hợp</p>
+                                    </div>
+                                </div>
+                                <div class="col col-md-6" bis_skin_checked="1">
+                                    <div class="img-holder" bis_skin_checked="1">
+                                        <img src="./assets/12e3ced4826e6d40b74c48b0f02e69d6.jpeg" alt=""
+                                            class="img img-responsive">
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="row" bis_skin_checked="1">
+                                <div class="col col-md-6" bis_skin_checked="1">
+                                    <div class="img-holder" bis_skin_checked="1">
+                                        <img src="./assets/a3d42dd7cc7979da378c4b1f4e06c1d0.jpeg" alt=""
+                                            class="img img-responsive">
+                                    </div>
+                                </div>
+                                <div class="col col-md-6 text-holder" bis_skin_checked="1">
+                                    <span class="heart">
+                                        <i class="fa fa-heart"></i>
+                                    </span>
+                                    <div class="story-text" bis_skin_checked="1">
+                                        <h3>Phút giây cầu hôn</h3>
+                                        <span class="date">20 tháng 05 năm 2022</span>
+                                        <p>Những tháng ngày bên nhau không phải là quãng thời gian quá dài, nhưng đủ cho
+                                            chúng ta nhận ra được rất nhiều điều. Yêu nhau, vun vén hạnh phúc và cùng nỗ
+                                            lực vượt qua những khó khăn trong cuộc sống. Chúng ta từ 2 con người xa lạ
+                                            mà bước vào cuộc đời nhau. Và giờ đây chúng ta tiếp tục cùng nhau sang trang
+                                            mới. Giây phút anh ngỏ lời “Làm vợ anh nhé!”, em đã nguyện ý đời này, đi đâu
+                                            cũng được, miễn là cùng anh.</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="row" bis_skin_checked="1">
+                                <div class="col col-md-6 text-holder right-heart" bis_skin_checked="1">
+                                    <span class="heart">
+                                        <i class="fa fa-heart"></i>
+                                    </span>
+                                    <div class="story-text right-align-text" bis_skin_checked="1">
+                                        <h3>Ngày lễ thành hôn</h3>
+                                        <span class="date">15 tháng 04 năm 2023</span>
+                                        <p>“Tiếng trái tim đôi ta đập thật nhanh. Thì thầm lời yêu thương. Ngày tình về
+                                            chung đôi...” Sau bao nhiêu chờ đợi, cuối cùng ngày vui của chúng ta cũng
+                                            tới rồi. Cảm ơn vì mình đã luôn là một phần trong cuộc sống của nhau. Em và
+                                            anh không chỉ là người yêu mà chúng ta còn là tri kỷ. Ngày hôm nay, em sẽ là
+                                            cô dâu của anh và sau này sẽ là mẹ của các con anh.</p>
+                                    </div>
+                                </div>
+                                <div class="col col-md-6" bis_skin_checked="1">
+                                    <div class="img-holder" bis_skin_checked="1">
+                                        <img src="./assets/66b34237d201f65ee56d413ee11fe4f1.jpeg" alt=""
+                                            class="img img-responsive">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="cta section-padding parallax"
+            data-bg-image="https://biihappycom.sgp1.vultrobjects.com/ziiweb/website/63a6728167b480329c7d64ef/templates/61338a310cf1357216675f18/03d540459630562327e0569d10c36cd3.jpg"
+            data-speed="3"
+            style="background-image: url(&quot;https://biihappycom.sgp1.vultrobjects.com/ziiweb/website/63a6728167b480329c7d64ef/templates/61338a310cf1357216675f18/03d540459630562327e0569d10c36cd3.jpg&quot;); background-position: 50% calc(50% - -1575.26px); background-size: cover;">
+            <div class="container" bis_skin_checked="1">
+                <div class="row" bis_skin_checked="1">
+                    <div class="col col-xs-12" bis_skin_checked="1">
+                        <h2><span>We are going to...</span> Celebrate Our Love</h2>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="events-section section-padding" id="events">
+            <div class="container" bis_skin_checked="1">
+                <div class="row" bis_skin_checked="1">
+                    <div class="col col-xs-12" bis_skin_checked="1">
+                        <div class="section-title" bis_skin_checked="1">
+                            <div class="vertical-line" bis_skin_checked="1"><span><i class="fi flaticon-two"></i></span>
+                            </div>
+                            <h2>Sự kiện cưới </h2>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row text-center justify-content-center" bis_skin_checked="1">
+                    <div class="col col-xs-12 col-sm-4 col-md-3 mb-4" bis_skin_checked="1">
+                        <div class="card" bis_skin_checked="1">
+                            <img src="./assets/6c600e54fa0e0c4582a5b33415d35205.jpeg" class="card-img-top w-100"
+                                alt="LỄ ĂN HỎI">
+                            <div class="card-body" style="margin-top: 1rem;" bis_skin_checked="1">
+                                <h4 class="card-title"><strong>LỄ ĂN HỎI</strong></h4>
+                                <p class="card-text"><i class="fa fa-map-marker"></i> Số 12, Đường Bờ Đầm, Thôn 2, Xã
+                                    Lại Yên, Hoài Đức, Hà Nội</p>
+                                <p class="card-text"><i class="fa fa-clock-o"></i> 09 : 00 06/01/2023</p>
+                                <div class="calendar-button" bis_skin_checked="1">
+                                    <div class="atcb" style="display:none;" bis_skin_checked="1">
+                                        {
+                                        "name":"LỄ ĂN HỎI (Đám cưới Văn Mười và Thị Chuộng)",
+                                        "description":"Cảm ơn bạn đã dành thời gian tham dự đám cưới của chúng tôi!.
+                                        Thông tin chi tiết xem tại website:<br>[url]http://tinhtrang.net[/url]",
+                                        "startDate":"2023-01-06",
+                                        "endDate":"2023-01-06",
+                                        "startTime":"09 : 00",
+                                        "endTime":"09 : 00",
+                                        "location":"Số 12, Đường Bờ Đầm, Thôn 2, Xã Lại Yên, Hoài Đức, Hà Nội",
+                                        "options":["Apple","Google","iCal","Microsoft365","MicrosoftTeams","Outlook.com","Yahoo"],
+                                        "timeZone":"Asia/Ho_Chi_Minh",
+                                        "iCalFileName":"Reminder-Event",
+                                        "listStyle":"modal",
+                                        "label":"Thêm vào lịch",
+                                        "trigger":"click"
+                                        }
+                                    </div>
+                                </div>
+                                <a style="width: 80%;"
+                                    href="https://www.google.com/maps/search/21.023475,+105.709730?shorturl=1"
+                                    class="btn btn-danger" target="_blank" bis_skin_checked="1">Xem bản đồ <i
+                                        class="fa fa-angle-right"></i></a>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col col-xs-12 col-sm-4 col-md-3 mb-4" bis_skin_checked="1">
+                        <div class="card" bis_skin_checked="1">
+                            <img src="./assets/9c66d782e6c811467d91ecfb4fb7b0b1.jpeg" class="card-img-top w-100"
+                                alt="LỄ THÀNH HÔN">
+                            <div class="card-body" style="margin-top: 1rem;" bis_skin_checked="1">
+                                <h4 class="card-title"><strong>LỄ THÀNH HÔN</strong></h4>
+                                <p class="card-text"><i class="fa fa-map-marker"></i> Đội 3, Quyết Tiến, Vân Côn, Hoài
+                                    Đức, Hà Nội</p>
+                                <p class="card-text"><i class="fa fa-clock-o"></i> 12 : 15 07/01/2023</p>
+                                <div class="calendar-button" bis_skin_checked="1">
+                                    <div class="atcb" style="display:none;" bis_skin_checked="1">
+                                        {
+                                        "name":"LỄ THÀNH HÔN (Đám cưới Văn Mười và Thị Chuộng)",
+                                        "description":"Cảm ơn bạn đã dành thời gian tham dự đám cưới của chúng tôi!.
+                                        Thông tin chi tiết xem tại website:<br>[url]http://tinhtrang.net[/url]",
+                                        "startDate":"2023-01-07",
+                                        "endDate":"2023-01-07",
+                                        "startTime":"12 : 15",
+                                        "endTime":"12 : 15",
+                                        "location":"Đội 3, Quyết Tiến, Vân Côn, Hoài Đức, Hà Nội",
+                                        "options":["Apple","Google","iCal","Microsoft365","MicrosoftTeams","Outlook.com","Yahoo"],
+                                        "timeZone":"Asia/Ho_Chi_Minh",
+                                        "iCalFileName":"Reminder-Event",
+                                        "listStyle":"modal",
+                                        "label":"Thêm vào lịch",
+                                        "trigger":"click"
+                                        }
+                                    </div>
+                                </div>
+                                <a style="width: 80%;"
+                                    href="https://www.google.com/maps/search/21.001439,+105.668754?shorturl=1"
+                                    class="btn btn-danger" target="_blank" bis_skin_checked="1">Xem bản đồ <i
+                                        class="fa fa-angle-right"></i></a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+
+        <section class="gallery-section section-padding" id="gallery">
+            <div class="container" bis_skin_checked="1">
+                <div class="row" bis_skin_checked="1">
+                    <div class="col col-xs-12" bis_skin_checked="1">
+                        <div class="section-title" bis_skin_checked="1">
+                            <div class="vertical-line" bis_skin_checked="1"><span><i class="fi flaticon-two"></i></span>
+                            </div>
+                            <h2>Album hình cưới</h2>
+                            <div class="text-center mt-20" bis_skin_checked="1">
+                                <a href="http://tinhtrang.net/photo-album" target="_blank" class="btn btn-danger"
+                                    bis_skin_checked="1">Xem Album</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row" bis_skin_checked="1">
+                    <div class="col col-xs-12 sortable-gallery" bis_skin_checked="1">
+
+                        <div class="gallery-container gallery-fancybox masonry-gallery"
+                            style="position: relative; height: 1170.05px;" bis_skin_checked="1">
+                            <div class="grid " style="position: absolute; left: 0%; top: 0px;" bis_skin_checked="1">
+                                <a href="https://biihappycom.sgp1.vultrobjects.com/ziiweb/website/63a6728167b480329c7d64ef/galleries/63a678a18737a7108e22693a/large.jpg"
+                                    title="" class="fancybox" data-fancybox-group="gall-1" bis_skin_checked="1"
+                                    bis_size="{&quot;x&quot;:385,&quot;y&quot;:6384,&quot;w&quot;:369,&quot;h&quot;:246,&quot;abs_x&quot;:385,&quot;abs_y&quot;:6384}">
+                                    <img src="./assets/small.jpg" alt="" class="img img-responsive"
+                                        bis_size="{&quot;x&quot;:385,&quot;y&quot;:6384,&quot;w&quot;:369,&quot;h&quot;:246,&quot;abs_x&quot;:385,&quot;abs_y&quot;:6384}"
+                                        bis_id="bn_100xgwq9mjzxcn2diqjo9m">
+                                </a>
+                            </div>
+                            <div class="grid " style="position: absolute; left: 33.2394%; top: 0px;"
+                                bis_skin_checked="1">
+                                <a href="https://biihappycom.sgp1.vultrobjects.com/ziiweb/website/63a6728167b480329c7d64ef/galleries/63a678a00ce18936b81278b5/large.jpg"
+                                    title="" class="fancybox" data-fancybox-group="gall-1" bis_skin_checked="1"
+                                    bis_size="{&quot;x&quot;:769,&quot;y&quot;:6384,&quot;w&quot;:369,&quot;h&quot;:246,&quot;abs_x&quot;:769,&quot;abs_y&quot;:6384}">
+                                    <img src="./assets/small(1).jpg" alt="" class="img img-responsive"
+                                        bis_size="{&quot;x&quot;:769,&quot;y&quot;:6384,&quot;w&quot;:369,&quot;h&quot;:246,&quot;abs_x&quot;:769,&quot;abs_y&quot;:6384}"
+                                        bis_id="bn_x9d0t17zxj8ad8znminofe">
+                                </a>
+                            </div>
+                            <div class="grid " style="position: absolute; left: 66.6197%; top: 0px;"
+                                bis_skin_checked="1">
+                                <a href="https://biihappycom.sgp1.vultrobjects.com/ziiweb/website/63a6728167b480329c7d64ef/galleries/63a6789fb283c86a5537dc08/large.jpg"
+                                    title="" class="fancybox" data-fancybox-group="gall-1" bis_skin_checked="1"
+                                    bis_size="{&quot;x&quot;:1154,&quot;y&quot;:6384,&quot;w&quot;:369,&quot;h&quot;:246,&quot;abs_x&quot;:1154,&quot;abs_y&quot;:6384}">
+                                    <img src="./assets/small(2).jpg" alt="" class="img img-responsive"
+                                        bis_size="{&quot;x&quot;:1154,&quot;y&quot;:6384,&quot;w&quot;:369,&quot;h&quot;:246,&quot;abs_x&quot;:1154,&quot;abs_y&quot;:6384}"
+                                        bis_id="bn_h158bl413u4jmx8unty0hp">
+                                </a>
+                            </div>
+                            <div class="grid " style="position: absolute; left: 0%; top: 160px;" bis_skin_checked="1">
+                                <a href="https://biihappycom.sgp1.vultrobjects.com/ziiweb/website/63a6728167b480329c7d64ef/galleries/63a6789e2841ec46bf02f472/large.jpg"
+                                    title="" class="fancybox" data-fancybox-group="gall-1" bis_skin_checked="1"
+                                    bis_size="{&quot;x&quot;:385,&quot;y&quot;:6645,&quot;w&quot;:369,&quot;h&quot;:554,&quot;abs_x&quot;:385,&quot;abs_y&quot;:6645}">
+                                    <img src="./assets/small(3).jpg" alt="" class="img img-responsive"
+                                        bis_size="{&quot;x&quot;:385,&quot;y&quot;:6645,&quot;w&quot;:369,&quot;h&quot;:554,&quot;abs_x&quot;:385,&quot;abs_y&quot;:6645}"
+                                        bis_id="bn_b76h9we8fpw5v2rjr9zutu">
+                                </a>
+                            </div>
+                            <div class="grid " style="position: absolute; left: 33.2394%; top: 160px;"
+                                bis_skin_checked="1">
+                                <a href="https://biihappycom.sgp1.vultrobjects.com/ziiweb/website/63a6728167b480329c7d64ef/galleries/63a6784f8737a7108e226939/large.jpg"
+                                    title="" class="fancybox" data-fancybox-group="gall-1" bis_skin_checked="1"
+                                    bis_size="{&quot;x&quot;:769,&quot;y&quot;:6645,&quot;w&quot;:369,&quot;h&quot;:246,&quot;abs_x&quot;:769,&quot;abs_y&quot;:6645}">
+                                    <img src="./assets/small(4).jpg" alt="" class="img img-responsive"
+                                        bis_size="{&quot;x&quot;:769,&quot;y&quot;:6645,&quot;w&quot;:369,&quot;h&quot;:246,&quot;abs_x&quot;:769,&quot;abs_y&quot;:6645}"
+                                        bis_id="bn_97hszt9pbvmlnzb03vwipr">
+                                </a>
+                            </div>
+                            <div class="grid " style="position: absolute; left: 66.6197%; top: 160px;"
+                                bis_skin_checked="1">
+                                <a href="https://biihappycom.sgp1.vultrobjects.com/ziiweb/website/63a6728167b480329c7d64ef/galleries/63a6784dc0526679662d27c4/large.jpg"
+                                    title="" class="fancybox" data-fancybox-group="gall-1" bis_skin_checked="1"
+                                    bis_size="{&quot;x&quot;:1154,&quot;y&quot;:6645,&quot;w&quot;:369,&quot;h&quot;:258,&quot;abs_x&quot;:1154,&quot;abs_y&quot;:6645}">
+                                    <img src="./assets/small(5).jpg" alt="" class="img img-responsive"
+                                        bis_size="{&quot;x&quot;:1154,&quot;y&quot;:6645,&quot;w&quot;:369,&quot;h&quot;:258,&quot;abs_x&quot;:1154,&quot;abs_y&quot;:6645}"
+                                        bis_id="bn_nqybo6grlbmnwhuysbq2zq">
+                                </a>
+                            </div>
+                            <div class="grid " style="position: absolute; left: 33.2394%; top: 321px;"
+                                bis_skin_checked="1">
+                                <a href="https://biihappycom.sgp1.vultrobjects.com/ziiweb/website/63a6728167b480329c7d64ef/galleries/63a6784bf21fbd1f0d5e3623/large.jpg"
+                                    title="" class="fancybox" data-fancybox-group="gall-1" bis_skin_checked="1"
+                                    bis_size="{&quot;x&quot;:769,&quot;y&quot;:6906,&quot;w&quot;:369,&quot;h&quot;:258,&quot;abs_x&quot;:769,&quot;abs_y&quot;:6906}">
+                                    <img src="./assets/small(6).jpg" alt="" class="img img-responsive"
+                                        bis_size="{&quot;x&quot;:769,&quot;y&quot;:6906,&quot;w&quot;:369,&quot;h&quot;:258,&quot;abs_x&quot;:769,&quot;abs_y&quot;:6906}"
+                                        bis_id="bn_jjiv0buzplm30betx41zhy">
+                                </a>
+                            </div>
+                            <div class="grid " style="position: absolute; left: 66.6197%; top: 329px;"
+                                bis_skin_checked="1">
+                                <a href="https://biihappycom.sgp1.vultrobjects.com/ziiweb/website/63a6728167b480329c7d64ef/galleries/63a67849b283c86a5537dc07/large.jpg"
+                                    title="" class="fancybox" data-fancybox-group="gall-1" bis_skin_checked="1"
+                                    bis_size="{&quot;x&quot;:1154,&quot;y&quot;:6919,&quot;w&quot;:369,&quot;h&quot;:258,&quot;abs_x&quot;:1154,&quot;abs_y&quot;:6919}">
+                                    <img src="./assets/small(7).jpg" alt="" class="img img-responsive"
+                                        bis_size="{&quot;x&quot;:1154,&quot;y&quot;:6919,&quot;w&quot;:369,&quot;h&quot;:258,&quot;abs_x&quot;:1154,&quot;abs_y&quot;:6919}"
+                                        bis_id="bn_a8eisscocbrrm6wdc1icfm">
+                                </a>
+                            </div>
+                            <div class="grid " style="position: absolute; left: 33.2394%; top: 490px;"
+                                bis_skin_checked="1">
+                                <a href="https://biihappycom.sgp1.vultrobjects.com/ziiweb/website/63a6728167b480329c7d64ef/galleries/63a6784560a77b31b57f1e93/large.jpg"
+                                    title="" class="fancybox" data-fancybox-group="gall-1" bis_skin_checked="1"
+                                    bis_size="{&quot;x&quot;:769,&quot;y&quot;:7180,&quot;w&quot;:369,&quot;h&quot;:554,&quot;abs_x&quot;:769,&quot;abs_y&quot;:7180}">
+                                    <img src="./assets/small(8).jpg" alt="" class="img img-responsive"
+                                        bis_size="{&quot;x&quot;:769,&quot;y&quot;:7180,&quot;w&quot;:369,&quot;h&quot;:554,&quot;abs_x&quot;:769,&quot;abs_y&quot;:7180}"
+                                        bis_id="bn_fzp47ckbj4p0bfp23rz96o">
+                                </a>
+                            </div>
+                            <div class="grid " style="position: absolute; left: 66.6197%; top: 498px;"
+                                bis_skin_checked="1">
+                                <a href="https://biihappycom.sgp1.vultrobjects.com/ziiweb/website/63a6728167b480329c7d64ef/galleries/63a6784310b2c342925f5f85/large.jpg"
+                                    title="" class="fancybox" data-fancybox-group="gall-1" bis_skin_checked="1"
+                                    bis_size="{&quot;x&quot;:1154,&quot;y&quot;:7193,&quot;w&quot;:369,&quot;h&quot;:554,&quot;abs_x&quot;:1154,&quot;abs_y&quot;:7193}">
+                                    <img src="./assets/small(9).jpg" alt="" class="img img-responsive"
+                                        bis_size="{&quot;x&quot;:1154,&quot;y&quot;:7193,&quot;w&quot;:369,&quot;h&quot;:554,&quot;abs_x&quot;:1154,&quot;abs_y&quot;:7193}"
+                                        bis_id="bn_uz0glaznyxrsyadbedw373">
+                                </a>
+                            </div>
+                            <div class="grid " style="position: absolute; left: 0%; top: 510px;" bis_skin_checked="1">
+                                <a href="https://biihappycom.sgp1.vultrobjects.com/ziiweb/website/63a6728167b480329c7d64ef/galleries/63a678400e6b7d7d01159e36/large.jpg"
+                                    title="" class="fancybox" data-fancybox-group="gall-1" bis_skin_checked="1"
+                                    bis_size="{&quot;x&quot;:385,&quot;y&quot;:7215,&quot;w&quot;:369,&quot;h&quot;:554,&quot;abs_x&quot;:385,&quot;abs_y&quot;:7215}">
+                                    <img src="./assets/small(10).jpg" alt="" class="img img-responsive"
+                                        bis_size="{&quot;x&quot;:385,&quot;y&quot;:7215,&quot;w&quot;:369,&quot;h&quot;:554,&quot;abs_x&quot;:385,&quot;abs_y&quot;:7215}"
+                                        bis_id="bn_mreh8ip9xcev1jdf0desno">
+                                </a>
+                            </div>
+                            <div class="grid " style="position: absolute; left: 33.2394%; top: 840px;"
+                                bis_skin_checked="1">
+                                <a href="https://biihappycom.sgp1.vultrobjects.com/ziiweb/website/63a6728167b480329c7d64ef/galleries/63a6783d87982b2bc0090413/large.jpg"
+                                    title="" class="fancybox" data-fancybox-group="gall-1" bis_skin_checked="1"
+                                    bis_size="{&quot;x&quot;:769,&quot;y&quot;:7750,&quot;w&quot;:369,&quot;h&quot;:246,&quot;abs_x&quot;:769,&quot;abs_y&quot;:7750}">
+                                    <img src="./assets/small(11).jpg" alt="" class="img img-responsive"
+                                        bis_size="{&quot;x&quot;:769,&quot;y&quot;:7750,&quot;w&quot;:369,&quot;h&quot;:246,&quot;abs_x&quot;:769,&quot;abs_y&quot;:7750}"
+                                        bis_id="bn_1zmrkh2wmq1t0axyl51ggc">
+                                </a>
+                            </div>
+                            <div class="grid " style="position: absolute; left: 66.6197%; top: 848px;"
+                                bis_skin_checked="1">
+                                <a href="https://biihappycom.sgp1.vultrobjects.com/ziiweb/website/63a6728167b480329c7d64ef/galleries/63a6783588a97e70955b30b9/large.jpg"
+                                    title="" class="fancybox" data-fancybox-group="gall-1" bis_skin_checked="1"
+                                    bis_size="{&quot;x&quot;:1154,&quot;y&quot;:7763,&quot;w&quot;:369,&quot;h&quot;:258,&quot;abs_x&quot;:1154,&quot;abs_y&quot;:7763}">
+                                    <img src="./assets/small(12).jpg" alt="" class="img img-responsive"
+                                        bis_size="{&quot;x&quot;:1154,&quot;y&quot;:7763,&quot;w&quot;:369,&quot;h&quot;:258,&quot;abs_x&quot;:1154,&quot;abs_y&quot;:7763}"
+                                        bis_id="bn_1yz1grv17fhv3eos5xkedo">
+                                </a>
+                            </div>
+                            <div class="grid " style="position: absolute; left: 0%; top: 860px;" bis_skin_checked="1">
+                                <a href="https://biihappycom.sgp1.vultrobjects.com/ziiweb/website/63a6728167b480329c7d64ef/galleries/63a6783464e3a67138380eab/large.jpg"
+                                    title="" class="fancybox" data-fancybox-group="gall-1" bis_skin_checked="1"
+                                    bis_size="{&quot;x&quot;:385,&quot;y&quot;:7785,&quot;w&quot;:369,&quot;h&quot;:258,&quot;abs_x&quot;:385,&quot;abs_y&quot;:7785}">
+                                    <img src="./assets/small(13).jpg" alt="" class="img img-responsive"
+                                        bis_size="{&quot;x&quot;:385,&quot;y&quot;:7785,&quot;w&quot;:369,&quot;h&quot;:258,&quot;abs_x&quot;:385,&quot;abs_y&quot;:7785}"
+                                        bis_id="bn_1bbgtlsk7fl1c79kmxfu3m">
+                                </a>
+                            </div>
+                            <div class="grid " style="position: absolute; left: 33.2394%; top: 1001px;"
+                                bis_skin_checked="1">
+                                <a href="https://biihappycom.sgp1.vultrobjects.com/ziiweb/website/63a6728167b480329c7d64ef/galleries/63a6783260a77b31b57f1e92/large.jpg"
+                                    title="" class="fancybox" data-fancybox-group="gall-1" bis_skin_checked="1"
+                                    bis_size="{&quot;x&quot;:769,&quot;y&quot;:8012,&quot;w&quot;:369,&quot;h&quot;:258,&quot;abs_x&quot;:769,&quot;abs_y&quot;:8012}">
+                                    <img src="./assets/small(14).jpg" alt="" class="img img-responsive"
+                                        bis_size="{&quot;x&quot;:769,&quot;y&quot;:8012,&quot;w&quot;:369,&quot;h&quot;:258,&quot;abs_x&quot;:769,&quot;abs_y&quot;:8012}"
+                                        bis_id="bn_re85zij4ivm16s1iu4wff7">
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="rsvp-section section-padding parallax"
+            data-bg-image="https://biihappycom.sgp1.vultrobjects.com/ziiweb/website/63a6728167b480329c7d64ef/templates/61338a310cf1357216675f18/ac9ed9b35122ea35cfeea051f74c3ffc.jpg"
+            data-speed="10" id="rsvp"
+            style="background-image: url(&quot;https://biihappycom.sgp1.vultrobjects.com/ziiweb/website/63a6728167b480329c7d64ef/templates/61338a310cf1357216675f18/ac9ed9b35122ea35cfeea051f74c3ffc.jpg&quot;); background-position: 50% calc(50% - -840.656px); background-size: cover;">
+            <div class="container" bis_skin_checked="1">
+                <div class="row" bis_skin_checked="1">
+                    <div class="col col-xs-12" bis_skin_checked="1">
+                        <div class="section-title-white" bis_skin_checked="1">
+                            <div class="vertical-line" bis_skin_checked="1"><span><i class="fi flaticon-two"></i></span>
+                            </div>
+                            <h2>Sổ lưu bút</h2>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row content" bis_skin_checked="1">
+                    <div class="col col-lg-6 col-md-7" bis_skin_checked="1">
+                        <p>Cảm ơn bạn rất nhiều vì đã gửi những lời chúc mừng tốt đẹp nhất đến đám cưới của chúng tôi!
+                        </p>
+                        <form id="wish-form" class="form validate-rsvp-form row" method="post" novalidate="novalidate">
+                            <div class="col col-sm-6" bis_skin_checked="1">
+                                <input type="text" name="name" class="form-control" placeholder="Nhập họ tên*">
+                            </div>
+                            <div class="col col-sm-6" bis_skin_checked="1">
+                                <input type="email" name="email" class="form-control" placeholder="Nhập email">
+                            </div>
+                            <div class="col col-sm-12" bis_skin_checked="1">
+                                <textarea class="form-control" name="content"
+                                    placeholder="Nhập lời chúc của bạn*"></textarea>
+                            </div>
+                            <div class="col col-sm-12 submit-btn" bis_skin_checked="1">
+                                <button type="submit" class="submit">Gửi lời chúc</button>
+                                <span id="loader"><i class="fa fa-refresh fa-spin fa-3x fa-fw"></i></span>
+                            </div>
+                            <div class="col col-md-12 success-error-message" bis_skin_checked="1">
+                                <div id="success" bis_skin_checked="1">Thank you!</div>
+                                <div id="error" bis_skin_checked="1">Gửi lời chúc thất bại, vui lòng thử lại sau giây
+                                    lát!</div>
+                            </div>
+                        </form>
+                    </div>
+                    <div class="col col-lg-6 col-md-5" bis_skin_checked="1">
+                        <div class="wish-box" bis_skin_checked="1">
+                            <div class="wish-box-item " bis_skin_checked="1">
+                                <strong>Em nè</strong>
+                                <p>chúc 2 anh chị hạnh phúc</p>
+                            </div>
+                            <div class="wish-box-item bg" bis_skin_checked="1">
+                                <strong>Công Thạnh</strong>
+                                <p>Chúc anh chị trăm năm hạnh phúc !</p>
+                            </div>
+                            <div class="wish-box-item " bis_skin_checked="1">
+                                <strong>Huy Hưng</strong>
+                                <p>Chúc 2 bạn hạnh phúc</p>
+                            </div>
+                            <div class="wish-box-item bg" bis_skin_checked="1">
+                                <strong>PHẠM THẾ KHÁNH</strong>
+                                <p>Chúc 2 em mãi hạnh phúc!</p>
+                            </div>
+                            <div class="wish-box-item " bis_skin_checked="1">
+                                <strong>Nguyễn Thị Hồng Nhung</strong>
+                                <p>Chúc anh chị thật nhiều may mắn và hạnh phúc trên hành trình sắp tới.</p>
+                            </div>
+                            <div class="wish-box-item bg" bis_skin_checked="1">
+                                <strong>Nguyễn Thành An</strong>
+                                <p>Chúc hai em hạnh phúc trên hành trình mới, hai mảnh ghép rời nhưng cộng lại nhân lên
+                                    gấp nhiều lần giá trị!</p>
+                            </div>
+                            <div class="wish-box-item " bis_skin_checked="1">
+                                <strong>Mai Văn Xuân</strong>
+                                <p>Chúc đôi trai tài gái sắc hạnh phúc trọn vẹn, luôn yêu thương nhau thật nhiều!</p>
+                            </div>
+                            <div class="wish-box-item bg" bis_skin_checked="1">
+                                <strong>TUẤN TOHA</strong>
+                                <p>Chúc anh chị, tình mãi như ngày đầu nồng đậm , trăm năm hạnh phúc,</p>
+                            </div>
+                            <div class="wish-box-item " bis_skin_checked="1">
+                                <strong>TRAN ANH TUAN</strong>
+                                <p>Theo dõi anh đã lâu để học tập các kiến thức anh chia sẻ trên fb. Chúc anh &amp; chị
+                                    hạnh phúc</p>
+                            </div>
+                            <div class="wish-box-item bg" bis_skin_checked="1">
+                                <strong>Lê Như Ý</strong>
+                                <p>Chúc gia đình hạnh phúc, tình yêu mãi như ngày đầu tiên</p>
+                            </div>
+                            <div class="wish-box-item " bis_skin_checked="1">
+                                <strong>Chj bjt uoc</strong>
+                                <p>Chuc hp mai mai</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="container footer-end-text" bis_skin_checked="1">
+                <div class="row" bis_skin_checked="1">
+                    <div class="col col-xs-12" bis_skin_checked="1">
+                        <h2>Forever and always our love</h2>
+                        <span>( Văn Mười - Thị Chuộng )</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+    <div id="donate-modal" class="donate-modal" bis_skin_checked="1">
+        <div class="donate-modal-content" bis_skin_checked="1">
+            <div class="donate-modal-header" bis_skin_checked="1">
+                <span class="donate-modal-close">×</span>
+                <strong>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" fill="currentColor"
+                        class="bi bi-coin" viewBox="0 0 16 16">
+                        <path
+                            d="M5.5 9.511c.076.954.83 1.697 2.182 1.785V12h.6v-.709c1.4-.098 2.218-.846 2.218-1.932 0-.987-.626-1.496-1.745-1.76l-.473-.112V5.57c.6.068.982.396 1.074.85h1.052c-.076-.919-.864-1.638-2.126-1.716V4h-.6v.719c-1.195.117-2.01.836-2.01 1.853 0 .9.606 1.472 1.613 1.707l.397.098v2.034c-.615-.093-1.022-.43-1.114-.9H5.5zm2.177-2.166c-.59-.137-.91-.416-.91-.836 0-.47.345-.822.915-.925v1.76h-.005zm.692 1.193c.717.166 1.048.435 1.048.91 0 .542-.412.914-1.135.982V8.518l.087.02z">
+                        </path>
+                        <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"></path>
+                        <path d="M8 13.5a5.5 5.5 0 1 1 0-11 5.5 5.5 0 0 1 0 11zm0 .5A6 6 0 1 0 8 2a6 6 0 0 0 0 12z">
+                        </path>
+                    </svg>
+                    <span>Hộp mừng cưới</span>
+                </strong>
+            </div>
+            <div class="donate-modal-body" bis_skin_checked="1">
+                <div class="donate-box" bis_skin_checked="1">
+                    <div class="donate-card" bis_skin_checked="1">
+                        <h3>Mừng cưới đến chú rể</h3>
+                        <img class="qr-code-image" src="./assets/84a8b68e21160888481b77af6416227e.jpeg">
+                        <p>Ngân hàng: <strong>Ngân hàng Quân đội (MB)</strong></p>
+                        <p>Tên tài khoản: <strong>NGUYEN DAC TINH</strong></p>
+                        <p>Số tài khoản: <strong>0988405405</strong></p>
+                        <p>Chi nhánh: <strong></strong></p>
+
+                    </div>
+                    <div class="donate-card" bis_skin_checked="1">
+                        <h3>Mừng cưới đến cô dâu</h3>
+                        <img class="qr-code-image" src="./assets/eca96d0c92dd1fecd9c624513067849c.jpeg">
+                        <p>Ngân hàng: <strong>Ngân hàng Techcombank</strong></p>
+                        <p>Tên tài khoản: <strong>NGUYEN Thị Chuộng</strong></p>
+                        <p>Số tài khoản: <strong>19034406318012</strong></p>
+                        <p>Chi nhánh: <strong></strong></p>
+
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script type="text/javascript">
+        const biicore = { themeRoot: 'http://tinhtrang.net/templates/template2', webroot: 'http://tinhtrang.net', coreSite: 'https://biihappy.com', webToken: '63a6728167b480329c7d64ef', isPremium: ('1' === '1'), bgMusic: 'https://cdn.biihappy.com/ziiweb/wedding-musics/BeautifulInWhite-ShaneFilan-524801.mp3', alert: JSON.parse('[]'), effect: JSON.parse('{\"type\":\"heart\"}') };
+    </script>
+    <script src="./assets/jquery-plugin-collection.js.download"></script>
+    <script src="./assets/script.js.download"></script>
+    <script src="./assets/calendar.js.download"></script>
+    <script src="./assets/bii.js.download"></script>
+    <style type="text/css">
+        @-webkit-keyframes biilogo-pulse {
+            from {
+                -webkit-transform: scale3d(1, 1, 1);
+                transform: scale3d(1, 1, 1);
+            }
+
+            50% {
+                -webkit-transform: scale3d(0.95, 0.95, 0.95);
+                transform: scale3d(0.95, 0.95, 0.95);
+            }
+
+            to {
+                -webkit-transform: scale3d(1, 1, 1);
+                transform: scale3d(1, 1, 1);
+            }
+        }
+
+        @keyframes biilogo-pulse {
+            from {
+                -webkit-transform: scale3d(1, 1, 1);
+                transform: scale3d(1, 1, 1);
+            }
+
+            50% {
+                -webkit-transform: scale3d(0.95, 0.95, 0.95);
+                transform: scale3d(0.95, 0.95, 0.95);
+            }
+
+            to {
+                -webkit-transform: scale3d(1, 1, 1);
+                transform: scale3d(1, 1, 1);
+            }
+        }
+
+        .bii-player {
+            position: fixed;
+            bottom: 70px;
+            left: 50px;
+            width: 40px;
+            height: 40px;
+            z-index: 99999;
+            display: none;
+        }
+
+        .bii-player .playerIcon {
+            cursor: pointer;
+            display: block;
+            width: 40px;
+            height: 40px;
+            -webkit-border-radius: 50%;
+            -moz-border-radius: 50%;
+            -o-border-radius: 50%;
+            -ms-border-radius: 50%;
+            border-radius: 50%;
+            background-color: #df4758;
+            padding-top: 7px;
+            padding-left: 9px;
+            position: absolute;
+            z-index: 2;
+        }
+
+        .bii-player:after {
+            content: "";
+            position: absolute;
+            -webkit-border-radius: 50%;
+            -moz-border-radius: 50%;
+            -o-border-radius: 50%;
+            -ms-border-radius: 50%;
+            border-radius: 50%;
+            z-index: -1;
+            background-color: rgba(242, 59, 67, 0.3);
+            width: 120%;
+            height: 120%;
+            left: -10%;
+            top: -10%;
+            -webkit-animation: biilogo-pulse 1s infinite;
+            animation: biilogo-pulse 1s infinite;
+            z-index: 1;
+        }
+
+        .bii-player img {
+            width: 100%;
+            z-index: 99999;
+            position: absolute;
+            cursor: pointer;
+        }
+
+        .bii-player.show-sec .bii-player-secondary {
+            visibility: visible;
+        }
+
+        .bii-player.show-sec .bii-player-secondary-content {
+            transform: translate3d(0, 0, 0);
+        }
+
+        .bii-player-secondary {
+            position: absolute;
+            width: 310px;
+            left: 25px;
+            height: 50px;
+            overflow: hidden;
+            visibility: hidden;
+        }
+
+        .bii-player-secondary-content {
+            cursor: pointer;
+            user-select: none;
+            position: absolute;
+            width: 310px;
+            left: -25px;
+            background: #fff;
+            height: 40px;
+            padding: 8px 11px 8px 50px;
+            border: 1px solid #df4759;
+            border-radius: 30px;
+            z-index: 1;
+            font-size: 14px;
+            transform: translate3d(-100%, 0, 0);
+            transition: transform 175ms ease;
+            font-family: arial;
+            font-weight: 200;
+            color: #000;
+        }
+
+        @media (max-width: 799px) {
+            .bii-player {
+                bottom: 30px;
+                left: 20px;
+            }
+        }
+    </style>
+    <div class="bii-player" bis_skin_checked="1" style="display: block;">
+        <div onclick="playPause();" class="bii-player-secondary" bis_skin_checked="1">
+            <div class="bii-player-secondary-content" bis_skin_checked="1">Click vào đây nếu bạn muốn phát nhạc!</div>
+        </div>
+        <div onclick="playPause();" class="playerIcon" bis_skin_checked="1">
+            <span id="playerVolumeOff" style="display: block;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="25" height="27" fill="#fff"
+                    class="bi bi-volume-mute-fill" viewBox="0 0 16 16">
+                    <path
+                        d="M6.717 3.55A.5.5 0 0 1 7 4v8a.5.5 0 0 1-.812.39L3.825 10.5H1.5A.5.5 0 0 1 1 10V6a.5.5 0 0 1 .5-.5h2.325l2.363-1.89a.5.5 0 0 1 .529-.06zm7.137 2.096a.5.5 0 0 1 0 .708L12.207 8l1.647 1.646a.5.5 0 0 1-.708.708L11.5 8.707l-1.646 1.647a.5.5 0 0 1-.708-.708L10.793 8 9.146 6.354a.5.5 0 1 1 .708-.708L11.5 7.293l1.646-1.647a.5.5 0 0 1 .708 0z">
+                    </path>
+                </svg>
+            </span>
+            <span style="display: none;" id="playerVolumeOn">
+                <svg xmlns="http://www.w3.org/2000/svg" width="25" height="27" fill="#fff" class="bi bi-volume-up-fill"
+                    viewBox="0 0 16 16">
+                    <path
+                        d="M11.536 14.01A8.473 8.473 0 0 0 14.026 8a8.473 8.473 0 0 0-2.49-6.01l-.708.707A7.476 7.476 0 0 1 13.025 8c0 2.071-.84 3.946-2.197 5.303l.708.707z">
+                    </path>
+                    <path
+                        d="M10.121 12.596A6.48 6.48 0 0 0 12.025 8a6.48 6.48 0 0 0-1.904-4.596l-.707.707A5.483 5.483 0 0 1 11.025 8a5.483 5.483 0 0 1-1.61 3.89l.706.706z">
+                    </path>
+                    <path
+                        d="M8.707 11.182A4.486 4.486 0 0 0 10.025 8a4.486 4.486 0 0 0-1.318-3.182L8 5.525A3.489 3.489 0 0 1 9.025 8 3.49 3.49 0 0 1 8 10.475l.707.707zM6.717 3.55A.5.5 0 0 1 7 4v8a.5.5 0 0 1-.812.39L3.825 10.5H1.5A.5.5 0 0 1 1 10V6a.5.5 0 0 1 .5-.5h2.325l2.363-1.89a.5.5 0 0 1 .529-.06z">
+                    </path>
+                </svg>
+            </span>
+        </div>
+    </div>
+
+
+    <div id="eJOY__extension_root" class="eJOY__extension_root_class" style="all: unset;" bis_skin_checked="1"></div>
+    <iframe id="nr-ext-rsicon"
+        style="position: absolute; display: none; width: 50px; height: 50px; z-index: 2147483647; border-style: none; background: transparent;"
+        src="./assets/saved_resource.html"></iframe><img src="./assets/heart.png" class="snowfall-flakes"
+        style="width: 25.06px; height: 25.06px; position: absolute; font-size: 0px; z-index: 999999; top: 8160px; left: 412.262px;"><img
+        src="./assets/heart.png" class="snowfall-flakes"
+        style="width: 24.91px; height: 24.91px; position: absolute; font-size: 0px; z-index: 999999; top: 6900px; left: 422.297px;"><img
+        src="./assets/heart.png" class="snowfall-flakes"
+        style="width: 22.03px; height: 22.03px; position: absolute; font-size: 0px; z-index: 999999; top: 8324px; left: 279.425px;"><img
+        src="./assets/heart.png" class="snowfall-flakes"
+        style="width: 22.3px; height: 22.3px; position: absolute; font-size: 0px; z-index: 999999; top: 4167px; left: 290.256px;"><img
+        src="./assets/heart.png" class="snowfall-flakes"
+        style="width: 20.08px; height: 20.08px; position: absolute; font-size: 0px; z-index: 999999; top: 2702px; left: 128.395px;"><img
+        src="./assets/heart.png" class="snowfall-flakes"
+        style="width: 30.62px; height: 30.62px; position: absolute; font-size: 0px; z-index: 999999; top: 4833px; left: 793.615px;"><img
+        src="./assets/heart.png" class="snowfall-flakes"
+        style="width: 15.37px; height: 15.37px; position: absolute; font-size: 0px; z-index: 999999; top: 9528px; left: 281.705px;"><img
+        src="./assets/heart.png" class="snowfall-flakes"
+        style="width: 15.72px; height: 15.72px; position: absolute; font-size: 0px; z-index: 999999; top: 9954px; left: 143.772px;"><img
+        src="./assets/heart.png" class="snowfall-flakes"
+        style="width: 20.58px; height: 20.58px; position: absolute; font-size: 0px; z-index: 999999; top: 9016px; left: 822.621px;"><img
+        src="./assets/heart.png" class="snowfall-flakes"
+        style="width: 19.48px; height: 19.48px; position: absolute; font-size: 0px; z-index: 999999; top: 3426px; left: 856.982px;"><img
+        src="./assets/heart.png" class="snowfall-flakes"
+        style="width: 22.28px; height: 22.28px; position: absolute; font-size: 0px; z-index: 999999; top: 1713px; left: 386.467px;"><img
+        src="./assets/heart.png" class="snowfall-flakes"
+        style="width: 27.56px; height: 27.56px; position: absolute; font-size: 0px; z-index: 999999; top: 3426px; left: 173.619px;"><img
+        src="./assets/heart.png" class="snowfall-flakes"
+        style="width: 29.46px; height: 29.46px; position: absolute; font-size: 0px; z-index: 999999; top: 1713px; left: 283.183px;"><img
+        src="./assets/heart.png" class="snowfall-flakes"
+        style="width: 26.83px; height: 26.83px; position: absolute; font-size: 0px; z-index: 999999; top: 8106px; left: 72.6473px;"><img
+        src="./assets/heart.png" class="snowfall-flakes"
+        style="width: 22.3px; height: 22.3px; position: absolute; font-size: 0px; z-index: 999999; top: 6872px; left: 367.351px;"><img
+        src="./assets/heart.png" class="snowfall-flakes"
+        style="width: 27.4px; height: 27.4px; position: absolute; font-size: 0px; z-index: 999999; top: 514px; left: 349.691px;"><img
+        src="./assets/heart.png" class="snowfall-flakes"
+        style="width: 31.73px; height: 31.73px; position: absolute; font-size: 0px; z-index: 999999; top: 5139px; left: 700.166px;"><img
+        src="./assets/heart.png" class="snowfall-flakes"
+        style="width: 21.99px; height: 21.99px; position: absolute; font-size: 0px; z-index: 999999; top: 5920px; left: 352.838px;"><img
+        src="./assets/heart.png" class="snowfall-flakes"
+        style="width: 24.59px; height: 24.59px; position: absolute; font-size: 0px; z-index: 999999; top: 6202px; left: 152.54px;"><img
+        src="./assets/heart.png" class="snowfall-flakes"
+        style="width: 25.88px; height: 25.88px; position: absolute; font-size: 0px; z-index: 999999; top: 5414px; left: 628.799px;"><img
+        src="./assets/heart.png" class="snowfall-flakes"
+        style="width: 31.51px; height: 31.51px; position: absolute; font-size: 0px; z-index: 999999; top: 4121px; left: 650.85px;"><img
+        src="./assets/heart.png" class="snowfall-flakes"
+        style="width: 19.56px; height: 19.56px; position: absolute; font-size: 0px; z-index: 999999; top: 4164px; left: 630.29px;"><img
+        src="./assets/heart.png" class="snowfall-flakes"
+        style="width: 19.67px; height: 19.67px; position: absolute; font-size: 0px; z-index: 999999; top: 369px; left: 443.601px;"><img
+        src="./assets/heart.png" class="snowfall-flakes"
+        style="width: 28.94px; height: 28.94px; position: absolute; font-size: 0px; z-index: 999999; top: 10370px; left: 839.624px;"><img
+        src="./assets/heart.png" class="snowfall-flakes"
+        style="width: 24.36px; height: 24.36px; position: absolute; font-size: 0px; z-index: 999999; top: 6816px; left: 873.987px;"><img
+        src="./assets/heart.png" class="snowfall-flakes"
+        style="width: 29.02px; height: 29.02px; position: absolute; font-size: 0px; z-index: 999999; top: 6934px; left: 226.305px;"><img
+        src="./assets/heart.png" class="snowfall-flakes"
+        style="width: 28.89px; height: 28.89px; position: absolute; font-size: 0px; z-index: 999999; top: 78px; left: 251.114px;"><img
+        src="./assets/heart.png" class="snowfall-flakes"
+        style="width: 29.67px; height: 29.67px; position: absolute; font-size: 0px; z-index: 999999; top: 8106px; left: 196.144px;"><img
+        src="./assets/heart.png" class="snowfall-flakes"
+        style="width: 23.6px; height: 23.6px; position: absolute; font-size: 0px; z-index: 999999; top: 8005px; left: 129.967px;"><img
+        src="./assets/heart.png" class="snowfall-flakes"
+        style="width: 28.37px; height: 28.37px; position: absolute; font-size: 0px; z-index: 999999; top: 3450px; left: 456.922px;"><audio
+        src="https://cdn.biihappy.com/ziiweb/wedding-musics/BeautifulInWhite-ShaneFilan-524801.mp3" controls="controls"
+        style="display: none;"></audio>
+</body><grammarly-desktop-integration data-grammarly-shadow-root="true"></grammarly-desktop-integration>
+
+</html>
